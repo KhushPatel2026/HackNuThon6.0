@@ -7,6 +7,9 @@ import Login from './Pages/Authentication/Login/Login'
 import Profile from './Pages/Profile/Profile'
 import Logout from './Components/Logout'
 import Test from './Pages/Testing/Test'
+import TransactionForm from './Pages/Transaction/transactionForm'
+import AdminPanel from './Pages/Transaction/adminPanel'
+import AuditLogs from './Pages/Transaction/auditLogs'
 
 function App() {
 
@@ -33,6 +36,10 @@ function App() {
         <Route path="/login" element={<Login/>} />
 				<Route path="/profile" element={<Profile/>} />
         <Route path="/test" element={<Test/>} />
+        <Route path="/" element={<TransactionForm/>} />
+        <Route path="/admin" element={<AdminPanel/>} />
+        <Route path="/audit-logs" element={<AuditLogs/>} />
+        <Route path="*" element={<h1>404 Not Found</h1>} />
 			</Routes>
     </div>
   )

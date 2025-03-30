@@ -1,414 +1,312 @@
-require("dotenv").config();
-const express = require("express");
-const mongoose = require("mongoose");
-const cors = require("cors");
-const axios = require("axios");
-const cookieParser = require("cookie-parser");
-const { OpenAI } = require("openai");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const { Server } = require("socket.io");
-const http = require("http");
-const jwt = require("jsonwebtoken");
-const { Configuration, PlaidApi, PlaidEnvironments } = require("plaid");
-const session = require("express-session");
-const passport = require("./Utils/passportConfig");
-const User = require("./Model/User");
-
-// Import routes
-const authRoutes = require("./routes/authRoutes");
-const profileRoutes = require("./routes/profileRoutes");
-const socialAuthRoutes = require("./Routes/socialAuthRoute");
-
+require('dotenv').config();
+const express = require('express');
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "http://localhost:5173", credentials: true } });
+const cors = require('cors');
+const mongoose = require('mongoose');
+const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const passport = require('passport');
+const axios = require('axios');
+const jwt = require('jsonwebtoken');
+const { Server } = require('socket.io');
+const http = require('http');
+const { GoogleGenerativeAI } = require('@google/generative-ai'); 
+// Import Google Generative AI SDK
+const User = require('./Model/User');
 
-// Middleware setup
-app.use(cors({ origin: "http://localhost:5173", credentials: true }));
+const authRoutes = require('./routes/authRoutes');
+const profileRoutes = require('./routes/profileRoutes');
+const socialAuthRoutes = require('./routes/socialAuthRoute');
+
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: 'http://localhost:5173' } });
+
+const MONGO_URL = process.env.MONGO_URI;
+const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET;
+const HUGGING_FACE_API_KEY = process.env.HUGGING_FACE_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+// Initialize the Google Generative AI SDK with your API key
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+// Get the Gemini model
+const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
-
-// Session configuration
-app.use(
-  session({
-    secret: process.env.JWT_SECRET,
-    resave: false,
-    saveUninitialized: true,
-  })
-);
-
-// Initialize passport
+app.use(session({ secret: JWT_SECRET, resave: false, saveUninitialized: true }));
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Plaid Configuration
-const plaidConfig = new Configuration({
-  basePath: PlaidEnvironments.sandbox,
-  baseOptions: {
-    headers: {
-      "PLAID-CLIENT-ID": process.env.PLAID_CLIENT_ID,
-      "PLAID-SECRET": process.env.PLAID_SECRET,
-      "Plaid-Version": "2020-09-14",
-    },
-  },
-});
+// MongoDB connection
+mongoose.connect(MONGO_URL)
+    .then(() => console.log("MongoDB connected"))
+    .catch(err => console.error("MongoDB error:", err));
 
-const plaidClient = new PlaidApi(plaidConfig);
-
-// MongoDB Connection
-mongoose
-  .connect(process.env.MONGO_URI || process.env.MONGO_URL)
-  .then(() => console.log("✅ MongoDB Connected"))
-  .catch((err) => console.error("❌ MongoDB Connection Error:", err));
-
-// Transaction Schema
-const TransactionSchema = new mongoose.Schema({
-  sender: { type: String, required: true },
-  receiver: { type: String, required: true },
-  amount: { type: Number, required: true },
-  paymentMethod: { type: String, required: true },
-  timestamp: { type: Date, default: Date.now },
-  remarks: String,
-  ipAddress: String,
-  deviceInfo: String,
-  isFraudulent: { type: Boolean, default: false },
-  fraudScore: Number,
-  fraudReasons: String,
-  complianceStatus: String,
-  senderDetails: {
-    name: String,
-    accountNumber: String,
-    routingNumber: String,
-    ip: String,
-  },
-  plaidTransactionId: { type: String, unique: true }, // Store Plaid transaction ID
-});
-
-const Transaction = mongoose.model("Transaction", TransactionSchema);
-
-// AI Clients
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const HF_API_TOKEN = process.env.HUGGINGFACE_API_KEY;
-
-// Authentication Middleware
-const authMiddleware = async (req, res, next) => {
-  const token = req.headers["x-access-token"];
-  if (!token) {
-    console.log("No token provided in request headers");
-    return res.status(401).json({ error: "Unauthorized: No token provided" });
-  }
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const email = decoded.email;
-    const user = await User.findOne({ email }).select("-password");
-    if (!user) {
-      console.log(`User not found for email: ${email}`);
-      return res.status(404).json({ error: "User not found" });
+// First, let's check if we need to drop the collection entirely to fix the index issue
+mongoose.connection.once('open', async () => {
+    try {
+        console.log("Connection is open, checking for collection issues...");
+        
+        // Check if the transactions collection exists and drop it to recreate
+        // This is a drastic approach but will solve the index issues
+        const collections = await mongoose.connection.db.listCollections().toArray();
+        const transactionCollectionExists = collections.some(
+            collection => collection.name === 'transactions'
+        );
+        
+        if (transactionCollectionExists) {
+            console.log("Transactions collection exists, dropping it to resolve index issues...");
+            await mongoose.connection.db.dropCollection('transactions');
+            console.log("Transactions collection dropped successfully");
+        }
+    } catch (error) {
+        console.error("Error handling collection:", error);
     }
-    req.user = user;
-    next();
-  } catch (error) {
-    console.error("Token verification failed:", error.message);
-    res.status(401).json({ error: "Invalid token" });
-  }
+});
+
+// Transaction Schema - now with a completely new name to avoid conflicts
+const transactionSchema = new mongoose.Schema({
+    step: Number,
+    type: String,
+    amount: Number,
+    nameOrig: String,
+    oldbalanceOrg: Number,
+    newbalanceOrig: Number,
+    nameDest: String,
+    oldbalanceDest: Number,
+    newbalanceDest: Number,
+    isFraud: Boolean,
+    fraud_probability: Number,
+    insight: String,
+    compliance: String,
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    created_at: { type: Date, default: Date.now },
+    // Adding a unique transaction ID field to avoid collisions
+    transactionId: { 
+        type: String, 
+        default: () => new mongoose.Types.ObjectId().toString(),
+        unique: true
+    }
+});
+
+// Create the models
+const Transaction = mongoose.model('Transaction', transactionSchema);
+
+// Audit Log Schema
+const auditLogSchema = new mongoose.Schema({
+    action: String,
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    timestamp: { type: Date, default: Date.now }
+});
+const AuditLog = mongoose.model('AuditLog', auditLogSchema);
+
+// Authentication middleware
+const authenticateUser = async (req, res, next) => {
+    try {
+        const token = req.headers['x-access-token'];
+        if (!token) {
+            console.log('Authentication error: No token provided');
+            return res.status(401).json({ status: 'error', error: 'No authentication token provided' });
+        }
+        
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log('Token decoded:', decoded);
+        
+        const user = await User.findOne({ email: decoded.email }).select('-password');
+        if (!user) {
+            console.log('Authentication error: User not found for email:', decoded.email);
+            return res.status(404).json({ status: 'error', error: 'User not found' });
+        }
+        
+        req.user = user;
+        next();
+    } catch (error) {
+        console.log('Authentication error:', error.message);
+        return res.status(401).json({ status: 'error', error: 'Invalid or expired token' });
+    }
 };
 
-// Retry Utility
-async function withRetry(fn, retries = 3, delay = 1000) {
-  for (let i = 0; i < retries; i++) {
+// Add transaction
+app.post('/api/transactions', authenticateUser, async (req, res) => {
+    const transaction = req.body;
     try {
-      return await fn();
-    } catch (error) {
-      if (i < retries - 1) {
-        console.warn(`Retry ${i + 1}/${retries} failed: ${error.message}`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      } else {
-        throw error;
-      }
-    }
-  }
-}
+        console.log('Processing new transaction:', transaction);
+        
+        // Predict fraud
+        console.log('Calling fraud prediction service...');
+        const fraudResponse = await axios.post('http://localhost:8000/predict', transaction);
+        const { isFraud, fraud_probability } = fraudResponse.data;
+        console.log('Fraud prediction result:', { isFraud, fraud_probability });
 
-// AI Agents (unchanged for brevity)
-async function anomalyDetectionAgent(transaction) {
-  const { amount, paymentMethod, ipAddress, deviceInfo, remarks, senderDetails } = transaction;
-  const inputText = `Amount: ${amount}, Method: ${paymentMethod}, IP: ${ipAddress}, Device: ${deviceInfo}, Remarks: ${remarks}, Sender: ${JSON.stringify(senderDetails)}`;
-  try {
-    const response = await withRetry(() =>
-      axios.post(
-        "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
-        { inputs: inputText, parameters: { candidate_labels: ["normal", "suspicious"] } },
-        { headers: { Authorization: `Bearer ${HF_API_TOKEN}` } }
-      )
-    );
-    return response.data.scores[response.data.labels.indexOf("suspicious")];
-  } catch (error) {
-    console.error("Anomaly Detection Error:", error);
-    return 0.5;
-  }
-}
+        // Get insight from Hugging Face
+        console.log('Getting insights from Hugging Face...');
+        const insight = await getHuggingFaceInsight(transaction, isFraud);
+        console.log('Insight received:', insight);
 
-async function sequenceAnalysisAgent(transaction) {
-  const pastTransactions = await Transaction.find({ sender: transaction.sender })
-    .sort({ timestamp: -1 })
-    .limit(10);
-  const sequenceText = pastTransactions
-    .map((t) => `Amount: ${t.amount}, Method: ${t.paymentMethod}, Fraud: ${t.isFraudulent}, Sender: ${JSON.stringify(t.senderDetails)}`)
-    .concat(`Amount: ${transaction.amount}, Method: ${transaction.paymentMethod}, Sender: ${JSON.stringify(transaction.senderDetails)}`)
-    .join("\n");
-  try {
-    const response = await withRetry(() =>
-      axios.post(
-        "https://api-inference.huggingface.co/models/distilbert-base-uncased-finetuned-sst-2-english",
-        { inputs: sequenceText },
-        { headers: { Authorization: `Bearer ${HF_API_TOKEN}` } }
-      )
-    );
-    return response.data[0].find((label) => label.label === "NEGATIVE")?.score || 0.5;
-  } catch (error) {
-    console.error("Sequence Analysis Error:", error);
-    return 0.5;
-  }
-}
+        // Check compliance with Gemini
+        console.log('Checking compliance with Gemini...');
+        const compliance = await checkComplianceWithGemini(transaction);
+        console.log('Compliance check result:', compliance);
 
-async function complianceAgent(transaction) {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-  const compliancePrompt = `Check compliance with RBI regulations for this transaction: ${JSON.stringify(transaction)}. Provide a concise response indicating if it complies or violates regulations, and why.`;
-  try {
-    const result = await withRetry(() => model.generateContent(compliancePrompt));
-    return result.response.text();
-  } catch (error) {
-    console.error("Compliance Check Error:", error);
-    return "Unable to verify compliance due to an error.";
-  }
-}
-
-async function insightAgent(transaction) {
-  try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-    const prompt = `You are a financial fraud expert. Analyze this transaction for fraud risks, considering sender details: ${JSON.stringify(transaction)}`;
-    
-    const response = await model.generateContent(prompt);
-    const text = response.response.text();
-    
-    return text;
-  } catch (error) {
-    console.error("Insight Agent Error:", error);
-    return "Unable to generate insights due to an error.";
-  }
-}
-
-async function detectFraud(transaction) {
-  try {
-    const anomalyScore = await anomalyDetectionAgent(transaction);
-    const sequenceScore = await sequenceAnalysisAgent(transaction);
-    const complianceResult = await complianceAgent(transaction);
-    const insights = await insightAgent(transaction);
-
-    const finalScore = anomalyScore * 0.4 + sequenceScore * 0.6;
-    const isFraudulent = finalScore > 0.7 || complianceResult.toLowerCase().includes("violate");
-    const fraudReasons = isFraudulent
-      ? `${insights}\nAnomaly Score: ${anomalyScore.toFixed(2)}\nSequence Score: ${sequenceScore.toFixed(2)}\nCompliance: ${complianceResult}`
-      : "Transaction appears legitimate based on AI analysis.";
-
-    return {
-      isFraudulent,
-      fraudScore: finalScore,
-      fraudReasons,
-      complianceStatus: complianceResult,
-    };
-  } catch (error) {
-    console.error("Fraud Detection Error:", error);
-    return {
-      isFraudulent: false,
-      fraudScore: 0.5,
-      fraudReasons: "Fraud detection failed due to an error.",
-      complianceStatus: "Unknown",
-    };
-  }
-}
-
-// API Routes
-app.use("/api/auth", authRoutes);
-app.use("/api", profileRoutes);
-app.use("/auth", socialAuthRoutes);
-
-// API: Create Plaid Link Token for Sender
-app.post("/api/plaid/create-link-token", authMiddleware, async (req, res) => {
-  try {
-    const response = await plaidClient.linkTokenCreate({
-      user: { client_user_id: req.user._id.toString() },
-      client_name: "FraudGuard",
-      products: ["auth", "identity", "transactions"], // Added "transactions" product
-      country_codes: ["US"], // Adjust to "IN" for India if needed
-      language: "en",
-    });
-    res.json({ link_token: response.data.link_token });
-  } catch (error) {
-    console.error("Plaid Link Token Error:", error);
-    res.status(500).json({ error: "Failed to create Plaid Link token" });
-  }
-});
-
-// API: Exchange Public Token and Save Sender Details
-app.post("/api/plaid/exchange-token", authMiddleware, async (req, res) => {
-  const { public_token, account_id } = req.body;
-  try {
-    const tokenResponse = await plaidClient.itemPublicTokenExchange({ public_token });
-    const accessToken = tokenResponse.data.access_token;
-
-    const authResponse = await plaidClient.authGet({ access_token: accessToken });
-    const account = authResponse.data.accounts.find((acc) => acc.account_id === account_id);
-
-    const identityResponse = await plaidClient.identityGet({ access_token: accessToken });
-    const owner = identityResponse.data.accounts.find((acc) => acc.account_id === account_id)?.owners[0];
-
-    const senderDetails = {
-      name: owner?.names[0] || "Unknown",
-      accountNumber: account?.account || "N/A",
-      routingNumber: account?.routing || "N/A",
-      ip: req.ip,
-    };
-
-    // Save access token and sender details to the user
-    await User.updateOne(
-      { _id: req.user._id },
-      {
-        plaidAccessToken: accessToken,
-        senderDetails: senderDetails,
-      }
-    );
-
-    res.json(senderDetails);
-  } catch (error) {
-    console.error("Plaid Token Exchange Error:", error);
-    res.status(500).json({ error: "Failed to fetch sender details with Plaid" });
-  }
-});
-
-// API: Get Sender Details (if already linked)
-app.get("/api/plaid/sender-details", authMiddleware, async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id);
-    if (!user.plaidAccessToken) {
-      return res.status(400).json({ error: "No bank account linked yet" });
-    }
-
-    const authResponse = await plaidClient.authGet({ access_token: user.plaidAccessToken });
-    const account = authResponse.data.accounts[0]; // Default to first account; adjust if needed
-    const senderDetails = user.senderDetails || {
-      name: "Unknown",
-      accountNumber: account?.account || "N/A",
-      routingNumber: account?.routing || "N/A",
-      ip: req.ip,
-    };
-
-    res.json(senderDetails);
-  } catch (error) {
-    console.error("Fetch Sender Details Error:", error);
-    res.status(500).json({ error: "Failed to fetch sender details" });
-  }
-});
-
-// API: Add Transaction
-app.post("/api/transaction", authMiddleware, async (req, res) => {
-  const { receiver, amount, paymentMethod, remarks, ipAddress, deviceInfo } = req.body;
-  const sender = req.user._id.toString();
-  const senderDetails = req.user.senderDetails;
-
-  if (!senderDetails || !senderDetails.accountNumber) {
-    return res.status(400).json({ error: "Sender bank details are required. Please link your bank account." });
-  }
-
-  const transaction = {
-    sender,
-    receiver,
-    amount: Number(amount),
-    paymentMethod,
-    remarks,
-    ipAddress: ipAddress || req.ip,
-    deviceInfo: deviceInfo || req.headers["user-agent"],
-    senderDetails,
-  };
-
-  try {
-    const fraudAnalysis = await detectFraud(transaction);
-    const newTransaction = new Transaction({ ...transaction, ...fraudAnalysis });
-    await newTransaction.save();
-    io.emit("new_transaction", newTransaction);
-    res.json(newTransaction);
-  } catch (error) {
-    console.error("Transaction Error:", error);
-    res.status(500).json({ error: "Failed to process transaction" });
-  }
-});
-
-// API: Get Transactions from Plaid and Sync with Database
-app.get("/api/transactions", authMiddleware, async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id);
-    if (!user.plaidAccessToken) {
-      return res.status(400).json({ error: "No bank account linked yet" });
-    }
-
-    // Fetch transactions from Plaid (last 30 days as an example)
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(endDate.getDate() - 30); // Last 30 days
-
-    const plaidResponse = await plaidClient.transactionsGet({
-      access_token: user.plaidAccessToken,
-      start_date: startDate.toISOString().split("T")[0],
-      end_date: endDate.toISOString().split("T")[0],
-    });
-
-    const plaidTransactions = plaidResponse.data.transactions;
-
-    // Map Plaid transactions to your schema
-    const transactions = plaidTransactions.map(async (pt) => {
-      const existingTransaction = await Transaction.findOne({ plaidTransactionId: pt.transaction_id });
-      if (!existingTransaction) {
-        const transaction = {
-          sender: req.user._id.toString(),
-          receiver: pt.merchant_name || "Unknown",
-          amount: pt.amount,
-          paymentMethod: pt.payment_channel || "CreditCard", // Adjust mapping as needed
-          timestamp: new Date(pt.date),
-          remarks: pt.name,
-          ipAddress: req.ip,
-          deviceInfo: req.headers["user-agent"],
-          senderDetails: user.senderDetails,
-          plaidTransactionId: pt.transaction_id,
+        // Convert string values to numbers
+        const processedTransaction = {
+            step: Number(transaction.step),
+            type: transaction.type,
+            amount: Number(transaction.amount),
+            nameOrig: transaction.nameOrig,
+            oldbalanceOrg: Number(transaction.oldbalanceOrg),
+            newbalanceOrig: Number(transaction.newbalanceOrig),
+            nameDest: transaction.nameDest,
+            oldbalanceDest: Number(transaction.oldbalanceDest),
+            newbalanceDest: Number(transaction.newbalanceDest),
+            isFraud,
+            fraud_probability,
+            insight,
+            compliance,
+            userId: req.user._id
         };
 
-        const fraudAnalysis = await detectFraud(transaction);
-        const newTransaction = new Transaction({ ...transaction, ...fraudAnalysis });
-        await newTransaction.save();
-        return newTransaction;
-      }
-      return existingTransaction;
-    });
+        console.log('Creating transaction with processed data');
+        
+        const newTransaction = new Transaction(processedTransaction);
+        const savedTransaction = await newTransaction.save();
+        console.log('Transaction saved to database with ID:', savedTransaction._id);
 
-    const resolvedTransactions = await Promise.all(transactions);
+        // Audit log
+        try {
+            const auditLog = new AuditLog({ 
+                action: 'Transaction Added', 
+                userId: req.user._id 
+            });
+            await auditLog.save();
+            console.log('Audit log created for transaction');
+        } catch (auditError) {
+            console.error('Error creating audit log:', auditError);
+            // Continue execution even if audit log fails
+        }
 
-    // Combine with any manually added transactions from MongoDB
-    const dbTransactions = await Transaction.find({ sender: req.user._id.toString(), plaidTransactionId: { $exists: false } });
-    const allTransactions = [...resolvedTransactions, ...dbTransactions].sort((a, b) => b.timestamp - a.timestamp);
+        // Notify admins if fraudulent
+        if (isFraud) {
+            console.log('Emitting fraud alert to admins');
+            io.emit('fraudAlert', savedTransaction);
+        }
 
-    res.json(allTransactions);
-  } catch (error) {
-    console.error("Fetch Plaid Transactions Error:", error);
-    res.status(500).json({ error: "Failed to fetch transactions from Plaid" });
-  }
+        res.json(savedTransaction);
+    } catch (error) {
+        console.error('Error processing transaction:', error);
+        res.status(500).json({ status: 'error', error: error.message });
+    }
 });
 
-// WebSocket Connection
-io.on("connection", (socket) => {
-  console.log("🔗 New WebSocket Connection");
-  socket.on("disconnect", () => console.log("❌ WebSocket Disconnected"));
+// Fetch user transactions
+app.get('/api/transactions', authenticateUser, async (req, res) => {
+    try {
+        console.log('Fetching transactions for user:', req.user._id);
+        const transactions = await Transaction.find({ userId: req.user._id }).sort({ created_at: -1 });
+        console.log(`Found ${transactions.length} transactions for user`);
+        res.json(transactions);
+    } catch (error) {
+        console.error('Error fetching transactions:', error);
+        res.status(500).json({ status: 'error', error: error.message });
+    }
 });
 
-// Start server
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// Fetch all transactions (admin only)
+app.get('/api/admin/transactions', authenticateUser, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') {
+            console.log('Unauthorized access attempt to admin transactions by user:', req.user._id);
+            return res.status(403).json({ status: 'error', error: 'Admins only' });
+        }
+        
+        console.log('Admin fetching all transactions');
+        const transactions = await Transaction.find().sort({ created_at: -1 });
+        console.log(`Found ${transactions.length} total transactions`);
+        res.json(transactions);
+    } catch (error) {
+        console.error('Error fetching admin transactions:', error);
+        res.status(500).json({ status: 'error', error: error.message });
+    }
+});
+
+// Fetch audit logs (admin only)
+app.get('/api/admin/audit-logs', authenticateUser, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') {
+            console.log('Unauthorized access attempt to audit logs by user:', req.user._id);
+            return res.status(403).json({ status: 'error', error: 'Admins only' });
+        }
+        
+        console.log('Admin fetching audit logs');
+        const logs = await AuditLog.find().sort({ timestamp: -1 });
+        console.log(`Found ${logs.length} audit logs`);
+        res.json(logs);
+    } catch (error) {
+        console.error('Error fetching audit logs:', error);
+        res.status(500).json({ status: 'error', error: error.message });
+    }
+});
+
+// Hugging Face Insight
+async function getHuggingFaceInsight(transaction, isFraud) {
+    try {
+        console.log('Calling Hugging Face API...');
+        const response = await axios.post(
+            'https://api-inference.huggingface.co/models/gpt2',
+            { inputs: `Transaction: ${JSON.stringify(transaction)}. Fraud: ${isFraud}. Explain why.` },
+            { headers: { Authorization: `Bearer ${HUGGING_FACE_API_KEY}` } }
+        );
+        return response.data[0].generated_text;
+    } catch (error) {
+        console.error('Error getting insight from Hugging Face:', error.message);
+        return isFraud ? "Likely fraud due to unusual patterns." : "Appears legitimate based on data.";
+    }
+}
+
+// Gemini Compliance Check using the Gemini SDK
+async function checkComplianceWithGemini(transaction) {
+    try {
+        console.log('Preparing prompt for Gemini...');
+        // Create a prompt for compliance checking
+        const prompt = `
+        Please analyze this financial transaction for compliance issues:
+        
+        Transaction Details:
+        - Type: ${transaction.type}
+        - Amount: $${transaction.amount}
+        - Sender: ${transaction.nameOrig}
+        - Recipient: ${transaction.nameDest}
+        - Sender's old balance: $${transaction.oldbalanceOrg}
+        - Sender's new balance: $${transaction.newbalanceOrig}
+        - Recipient's old balance: $${transaction.oldbalanceDest}
+        - Recipient's new balance: $${transaction.newbalanceDest}
+        
+        Evaluate this transaction for:
+        1. AML (Anti-Money Laundering) compliance
+        2. KYC (Know Your Customer) concerns
+        3. Unusual activity patterns
+        4. Regulatory reporting requirements
+        
+        Provide a brief compliance assessment (2-3 sentences).
+        `;
+
+        // Generate content using the Gemini model
+        console.log('Sending request to Gemini...');
+        const result = await geminiModel.generateContent(prompt);
+        const response = await result.response;
+        const complianceText = response.text();
+        
+        return complianceText || "Compliant with financial regulations";
+    } catch (error) {
+        console.error("Gemini API error:", error);
+        return "Compliance check unavailable. Error connecting to Gemini.";
+    }
+}
+
+app.use('/api/auth', authRoutes);
+app.use('/api', profileRoutes);
+app.use('/auth', socialAuthRoutes);
+
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
