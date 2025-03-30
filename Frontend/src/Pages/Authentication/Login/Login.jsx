@@ -33,6 +33,7 @@ function AuthComponent() {
 
             if (data.user) {
                 localStorage.setItem('token', data.user);
+                console.log('Token:', data.user);
                 toast.success(`${isLogin ? 'Login' : 'Registration'} successful!`);
                 setTimeout(() => {
                     window.location.href = '/profile';

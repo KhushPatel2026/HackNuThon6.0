@@ -6,6 +6,7 @@ import './App.css'
 import Login from './Pages/Authentication/Login/Login'
 import Profile from './Pages/Profile/Profile'
 import Logout from './Components/Logout'
+import Test from './Pages/Testing/Test'
 
 function App() {
 
@@ -16,18 +17,12 @@ function App() {
     const urlParams = new URLSearchParams(location.search);
     const token = urlParams.get('token');
 
-    if (token) {
-      localStorage.setItem('token', token);
-      navigate('/profile', { replace: true });
-    }
   }, [location,navigate]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
       navigate('/login', { replace: true });
-    }else{
-      navigate('/profile', { replace: true });
     }
   }, [navigate]);
 
@@ -37,6 +32,7 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login/>} />
 				<Route path="/profile" element={<Profile/>} />
+        <Route path="/test" element={<Test/>} />
 			</Routes>
     </div>
   )
