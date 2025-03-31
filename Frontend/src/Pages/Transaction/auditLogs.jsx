@@ -12,6 +12,7 @@ import {
   BarChart3,
   Users,
   PieChart,
+  LogOut,
 } from "lucide-react";
 import { Button } from "../../Components/ui/button";
 import { Input } from "../../Components/ui/input";
@@ -66,8 +67,8 @@ const Sidebar = ({ activePage = "audit-logs", notificationCount = 0 }) => {
           <SidebarItem
             icon={<BarChart3 className="w-5 h-5" />}
             label="Dashboard"
-            href="/user-dashboard"
-            isActive={activePage === "dashboard"}
+            href="/admin-dashboard"
+            isActive={activePage === "admin-dashboard"}
           />
         </SidebarSection>
 
@@ -88,9 +89,9 @@ const Sidebar = ({ activePage = "audit-logs", notificationCount = 0 }) => {
             isActive={activePage === "audit-logs"}
           />
           <SidebarItem
-            icon={<Shield className="w-5 h-5" />}
-            label="AI Insights"
-            href="/ai-insights"
+            icon={<LogOut className="w-5 h-5" />}
+            label="Logout"
+            href="/Logout"
             isActive={activePage === "ai-insights"}
           />
         </SidebarSection>
@@ -188,7 +189,7 @@ function AuditLogsPage() {
           <Button
             variant="ghost"
             className="text-gray-300 hover:text-white hover:bg-[#4aff78]/10"
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/admin-dashboard")}
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Dashboard

@@ -1,58 +1,79 @@
-import React from 'react'
-import { useEffect } from 'react'
-import { useNavigate,useLocation } from 'react-router-dom'
-import { Routes, Route } from 'react-router-dom'
-import './App.css'
-import Login from './Pages/Authentication/Login/Login'
-import Profile from './Pages/Profile/Profile'
-import Logout from './Components/Logout'
-import Test from './Pages/Testing/Test'
-import TransactionForm from './Pages/Transaction/transactionForm'
-import AdminPanel from './Pages/Transaction/adminPanel'
-import AuditLogs from './Pages/Transaction/auditLogs'
-import FraudDetectionLanding from './Pages/Landing/Landing'
-import AdminDashboard from './Pages/Dashboard/AdminDashboard'
-import UserDashboard from './Pages/Dashboard/UserDashboard'
-import Sidebar from './Components/Sidebar'
-import RegisterPage from './Pages/Authentication/Register/Register'
-
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
+import './App.css';
+import Login from './Pages/Authentication/Login/Login';
+import RegisterPage from './Pages/Authentication/Register/Register';
+import Profile from './Pages/Profile/Profile';
+import AdminPanel from './Pages/Transaction/adminPanel';
+import AuditLogs from './Pages/Transaction/auditLogs';
+import UserDashboard from './Pages/Dashboard/UserDashboard';
+import AdminDashboard from './Pages/Dashboard/AdminDashboard';
+import Logout from './Components/Logout';
+import FraudDetectionLanding from './Pages/Landing/Landing';
+import AdminUsersPage from './Pages/User/user';
 
 function App() {
-
   const navigate = useNavigate();
   const location = useLocation();
-
-  useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
-    const token = urlParams.get('token');
-
-  }, [location,navigate]);
+  const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/register', { replace: true });
+
+    // Allow access to public routes like /login and /register
+    if (!token && !['/login', '/register'].includes(location.pathname)) {
+      navigate('/login', { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, location]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const userRole = localStorage.getItem('role');
+
+    if (!token) {
+      return;
+    }
+
+    if (location.pathname.includes('/admin') && userRole !== 'admin') {
+      navigate('/user-dashboard', { replace: true });
+      return;
+    }
+
+    setIsAuthorized(true);
+  }, [navigate, location]);
 
   return (
     <div>
       <Routes>
+        {/* Public Routes */}
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<RegisterPage/>} />
-
-				<Route path="/profile" element={<Profile/>} />
-        <Route path="/test" element={<Test/>} />
-        <Route path="/" element={<TransactionForm/>} />
-        <Route path="/admin" element={<AdminPanel/>} />
-        <Route path="/audit-logs" element={<AuditLogs/>} />
-        <Route path="*" element={<h1>404 Not Found</h1>} />
+        <Route path="/register" element={<RegisterPage />} />
         <Route path="/landing" element={<FraudDetectionLanding />} />
-        <Route path="/user-dashboard" element={<UserDashboard />} />
-        <Route path="/admin-dashboard" element={<AdminDashboard />} />
-			</Routes>
+
+        {/* Protected Routes */}
+        {isAuthorized && (
+          <>
+            {/* User Routes */}
+            <Route path="/user-dashboard" element={<UserDashboard />} />
+            <Route path="/profile" element={<Profile />} />
+
+            {/* Admin Routes */}
+            <Route path="/admin-dashboard" element={<AdminDashboard />} />
+            <Route path="/admin" element={<AdminPanel />} />
+            <Route path="/audit-logs" element={<AuditLogs />} />
+            <Route path="/users" element={<AdminUsersPage />} />
+
+            {/* Logout */}
+            <Route path="/logout" element={<Logout />} />
+          </>
+        )}
+
+        {/* Fallback Route */}
+        <Route path="*" element={<h1>404 Not Found</h1>} />
+      </Routes>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

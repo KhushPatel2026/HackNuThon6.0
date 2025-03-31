@@ -33,13 +33,15 @@ export default function RegisterPage() {
 
       if (data.user) {
         localStorage.setItem('token', data.user);
-        // toast.success(`${isLogin ? 'Login' : 'Registration'} successful!`);
-        setTimeout(() => {
-            window.location.href = '/user-dashboard'; // Redirect to the dashboard after successful login
-        }, 1500);
-    } else {
-        toast.error('Please check your credentials');
-    }
+        localStorage.setItem('role', data.role); // Store user role
+        if (data.role === 'admin') {
+          window.location.href = '/admin-dashboard'; // Redirect admin
+        } else {
+          window.location.href = '/user-dashboard'; // Redirect user
+        }
+      } else {
+        setError('Please check your credentials');
+      }
     } catch (err) {
       setError("An error occurred. Please try again.");
     } finally {

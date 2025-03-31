@@ -14,9 +14,9 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 // Import Google Generative AI SDK
 const User = require('./Model/User');
 
-const authRoutes = require('./Routes/authRoutes');
-const profileRoutes = require('./Routes/profileRoutes');
-const socialAuthRoutes = require('./Routes/socialAuthRoute');
+const authRoutes = require('./routes/authRoutes');
+const profileRoutes = require('./routes/profileRoutes');
+const socialAuthRoutes = require('./routes/socialAuthRoute');
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: 'http://localhost:5173' } });
@@ -44,22 +44,15 @@ mongoose.connect(MONGO_URL)
     .then(() => console.log("MongoDB connected"))
     .catch(err => console.error("MongoDB error:", err));
 
-// First, let's check if we need to drop the collection entirely to fix the index issue
 mongoose.connection.once('open', async () => {
     try {
-        console.log("Connection is open, checking for collection issues...");
-        
-        // Check if the transactions collection exists and drop it to recreate
-        // This is a drastic approach but will solve the index issues
         const collections = await mongoose.connection.db.listCollections().toArray();
         const transactionCollectionExists = collections.some(
             collection => collection.name === 'transactions'
         );
-        
+
         if (transactionCollectionExists) {
-            console.log("Transactions collection exists, dropping it to resolve index issues...");
             await mongoose.connection.db.dropCollection('transactions');
-            console.log("Transactions collection dropped successfully");
         }
     } catch (error) {
         console.error("Error handling collection:", error);
@@ -112,7 +105,6 @@ const authenticateUser = async (req, res, next) => {
         }
         
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        console.log('Token decoded:', decoded);
         
         const user = await User.findOne({ email: decoded.email }).select('-password');
         if (!user) {
@@ -132,25 +124,17 @@ const authenticateUser = async (req, res, next) => {
 app.post('/api/transactions', authenticateUser, async (req, res) => {
     const transaction = req.body;
     try {
-        console.log('Processing new transaction:', transaction);
-        
-        // Predict fraud
-        console.log('Calling fraud prediction service...');
+        const userTransactions = await Transaction.find({ userId: req.user._id }).sort({ created_at: -1 });
+
         const fraudResponse = await axios.post('http://localhost:8000/predict', transaction);
         const { isFraud, fraud_probability } = fraudResponse.data;
-        console.log('Fraud prediction result:', { isFraud, fraud_probability });
 
-        // Get insight from Hugging Face
-        console.log('Getting insights from Hugging Face...');
-        const insight = await getHuggingFaceInsight(transaction, isFraud);
-        console.log('Insight received:', insight);
+        let insight = await getHuggingFaceInsight(transaction, isFraud, userTransactions);
+        insight = formatOutput(insight);
 
-        // Check compliance with Gemini
-        console.log('Checking compliance with Gemini...');
-        const compliance = await checkComplianceWithGemini(transaction);
-        console.log('Compliance check result:', compliance);
+        let compliance = await checkComplianceWithGemini(transaction, userTransactions);
+        compliance = formatOutput(compliance);
 
-        // Convert string values to numbers
         const processedTransaction = {
             step: Number(transaction.step),
             type: transaction.type,
@@ -168,34 +152,38 @@ app.post('/api/transactions', authenticateUser, async (req, res) => {
             userId: req.user._id
         };
 
-        console.log('Creating transaction with processed data');
-        
-        const newTransaction = new Transaction(processedTransaction);
-        const savedTransaction = await newTransaction.save();
-        console.log('Transaction saved to database with ID:', savedTransaction._id);
-
-        // Audit log
-        try {
-            const auditLog = new AuditLog({ 
-                action: 'Transaction Added', 
-                userId: req.user._id 
-            });
-            await auditLog.save();
-            console.log('Audit log created for transaction');
-        } catch (auditError) {
-            console.error('Error creating audit log:', auditError);
-            // Continue execution even if audit log fails
+        const User = await User.findById(req.user._id);
+        if (!User) {
+            return res.status(404).json({ status: 'error', error: 'User not found' });
         }
 
-        // Notify admins if fraudulent
+        User.accountBalance -= transaction.amount;
+        await User.save();
+
+        const newTransaction = new Transaction(processedTransaction);
+        const savedTransaction = await newTransaction.save();
+
+        try {
+            const auditLog = new AuditLog({
+                action: 'Transaction Added',
+                userId: req.user._id
+            });
+            await auditLog.save();
+        } catch (auditError) {
+            console.error('Error creating audit log:', auditError);
+        }
+
         if (isFraud) {
-            console.log('Emitting fraud alert to admins');
             io.emit('fraudAlert', savedTransaction);
         }
 
-        res.json(savedTransaction);
+        res.json({
+            transaction: savedTransaction,
+            fraudDetails: { isFraud, fraud_probability },
+            insight,
+            compliance
+        });
     } catch (error) {
-        console.error('Error processing transaction:', error);
         res.status(500).json({ status: 'error', error: error.message });
     }
 });
@@ -203,12 +191,9 @@ app.post('/api/transactions', authenticateUser, async (req, res) => {
 // Fetch user transactions
 app.get('/api/transactions', authenticateUser, async (req, res) => {
     try {
-        console.log('Fetching transactions for user:', req.user._id);
         const transactions = await Transaction.find({ userId: req.user._id }).sort({ created_at: -1 });
-        console.log(`Found ${transactions.length} transactions for user`);
         res.json(transactions);
     } catch (error) {
-        console.error('Error fetching transactions:', error);
         res.status(500).json({ status: 'error', error: error.message });
     }
 });
@@ -217,16 +202,12 @@ app.get('/api/transactions', authenticateUser, async (req, res) => {
 app.get('/api/admin/transactions', authenticateUser, async (req, res) => {
     try {
         if (req.user.role !== 'admin') {
-            console.log('Unauthorized access attempt to admin transactions by user:', req.user._id);
             return res.status(403).json({ status: 'error', error: 'Admins only' });
         }
-        
-        console.log('Admin fetching all transactions');
+
         const transactions = await Transaction.find().sort({ created_at: -1 });
-        console.log(`Found ${transactions.length} total transactions`);
         res.json(transactions);
     } catch (error) {
-        console.error('Error fetching admin transactions:', error);
         res.status(500).json({ status: 'error', error: error.message });
     }
 });
@@ -235,43 +216,71 @@ app.get('/api/admin/transactions', authenticateUser, async (req, res) => {
 app.get('/api/admin/audit-logs', authenticateUser, async (req, res) => {
     try {
         if (req.user.role !== 'admin') {
-            console.log('Unauthorized access attempt to audit logs by user:', req.user._id);
             return res.status(403).json({ status: 'error', error: 'Admins only' });
         }
-        
-        console.log('Admin fetching audit logs');
+
         const logs = await AuditLog.find().sort({ timestamp: -1 });
-        console.log(`Found ${logs.length} audit logs`);
         res.json(logs);
     } catch (error) {
-        console.error('Error fetching audit logs:', error);
         res.status(500).json({ status: 'error', error: error.message });
     }
 });
 
-// Hugging Face Insight
-async function getHuggingFaceInsight(transaction, isFraud) {
+app.get("/api/user", authenticateUser, async (req, res) => {
     try {
-        console.log('Calling Hugging Face API...');
+      if (!req.user || req.user.role !== "admin") {
+        return res.status(403).json({ status: "error", error: "Access denied" });
+      }
+      const users = await User.find({}, "-password");
+  
+      res.status(200).json({ status: "ok", users });
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ status: "error", error: "Internal server error" });
+    }
+});
+
+// Hugging Face Insight
+async function getHuggingFaceInsight(transaction, isFraud, userTransactions) {
+    try {
         const response = await axios.post(
-            'https://api-inference.huggingface.co/models/gpt2',
-            { inputs: `Transaction: ${JSON.stringify(transaction)}. Fraud: ${isFraud}. Explain why.` },
+            'https://api-inference.huggingface.co/models/google/gemma-3-27b-it',
+            {
+                inputs: `Analyze the following transaction and user's transaction history:
+                Transaction: ${JSON.stringify(transaction)}.
+                Fraud: ${isFraud}.
+                User's Transaction History: ${JSON.stringify(userTransactions.slice(0, 10))}.
+                Provide a concise explanation (2-3 lines) for why this transaction is fraudulent or not.`,
+            },
             { headers: { Authorization: `Bearer ${HUGGING_FACE_API_KEY}` } }
         );
-        return response.data[0].generated_text;
+
+        if (response.data && Array.isArray(response.data) && response.data[0]?.generated_text) {
+            return formatOutput(response.data[0].generated_text);
+        } else {
+            return "No insight available due to an unexpected response format.";
+        }
     } catch (error) {
-        console.error('Error getting insight from Hugging Face:', error.message);
-        return isFraud ? "Likely fraud due to unusual patterns." : "Appears legitimate based on data.";
+        if (error.response?.status === 429) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            return getHuggingFaceInsight(transaction, isFraud, userTransactions);
+        }
+
+        if (error.response?.status === 503) {
+            return "Hugging Face service is currently unavailable. Please try again later.";
+        }
+
+        return isFraud
+            ? "This transaction is likely fraudulent due to unusual patterns in the user's history."
+            : "This transaction appears legitimate based on the user's transaction history.";
     }
 }
 
 // Gemini Compliance Check using the Gemini SDK
-async function checkComplianceWithGemini(transaction) {
+async function checkComplianceWithGemini(transaction, userTransactions) {
     try {
-        console.log('Preparing prompt for Gemini...');
-        // Create a prompt for compliance checking
         const prompt = `
-        Please analyze this financial transaction for compliance issues:
+        Analyze this financial transaction for compliance issues and consider the user's transaction history:
         
         Transaction Details:
         - Type: ${transaction.type}
@@ -283,26 +292,25 @@ async function checkComplianceWithGemini(transaction) {
         - Recipient's old balance: $${transaction.oldbalanceDest}
         - Recipient's new balance: $${transaction.newbalanceDest}
         
-        Evaluate this transaction for:
-        1. AML (Anti-Money Laundering) compliance
-        2. KYC (Know Your Customer) concerns
-        3. Unusual activity patterns
-        4. Regulatory reporting requirements
+        User's Transaction History:
+        ${JSON.stringify(userTransactions)}
         
-        Provide a brief compliance assessment (2-3 sentences).
+        Provide a concise compliance assessment (2-3 lines) explaining whether this transaction is compliant or not.
         `;
 
-        // Generate content using the Gemini model
-        console.log('Sending request to Gemini...');
         const result = await geminiModel.generateContent(prompt);
         const response = await result.response;
-        const complianceText = response.text();
-        
-        return complianceText || "Compliant with financial regulations";
+        return response.text() || "This transaction complies with financial regulations based on the user's history.";
     } catch (error) {
-        console.error("Gemini API error:", error);
         return "Compliance check unavailable. Error connecting to Gemini.";
     }
+}
+
+// Utility function to format output
+function formatOutput(output) {
+    if (!output) return "No data available.";
+    // Remove unwanted characters like asterisks, newlines, or excessive whitespace
+    return output.replace(/[*\n\r]+/g, '').trim();
 }
 
 app.use('/api/auth', authRoutes);

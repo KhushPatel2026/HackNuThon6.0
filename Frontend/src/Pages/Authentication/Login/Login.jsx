@@ -21,28 +21,30 @@ export default function LoginPage() {
     setError("");
 
     try {
-        const response = await fetch('http://localhost:3000/api/auth/login', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email, password }),
-        });
+      const response = await fetch('http://localhost:3000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-        const data = await response.json();
+      const data = await response.json();
 
-        if (data.user) {
-            localStorage.setItem('token', data.user);
-            // toast.success(`${isLogin ? 'Login' : 'Registration'} successful!`);
-            setTimeout(() => {
-                window.location.href = '/user-dashboard'; // Redirect to the dashboard after successful login
-            }, 1500);
+      if (data.user) {
+        localStorage.setItem('token', data.user);
+        localStorage.setItem('role', data.role); // Store user role
+        if (data.role === 'admin') {
+          window.location.href = '/admin-dashboard'; // Redirect admin
         } else {
-            return setError('Please check your credentials');
+          window.location.href = '/user-dashboard'; // Redirect user
         }
+      } else {
+        setError('Please check your credentials');
+      }
     } catch (error) {
-        toast.error('An error occurred. Please try again.');
-        console.error('Auth error:', error);
+      setError('An error occurred. Please try again.');
+      console.error('Auth error:', error);
     }
     setLoading(false);
   };

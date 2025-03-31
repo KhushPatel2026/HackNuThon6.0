@@ -51,4 +51,17 @@ const changePassword = async (req, res) => {
   }
 };
 
-module.exports = { getProfile, editProfile, changePassword };
+const getUserDetails = async (req, res) => {
+  const token = req.headers['x-access-token'];
+  try{
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const email = decoded.email;
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ status: 'error', error: 'User not found' });
+    return res.json({ status: 'ok', user });
+  } catch (error) {
+    res.json({ status: 'error', error: 'invalid token' });
+  }
+}
+
+module.exports = { getProfile, editProfile, changePassword, getUserDetails };

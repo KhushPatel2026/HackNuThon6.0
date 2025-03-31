@@ -1,20 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const Logout = () => {
-    const navigate = useNavigate();
+  const navigate = useNavigate();
 
-    const handleLogout = () => {
-        localStorage.removeItem('token'); 
-        navigate('/login'); 
-    };
+  useEffect(() => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('role'); // Clear user role
+    navigate('/login', { replace: true });
+  }, [navigate]);
 
-    if(localStorage.getItem('token')!==null){
-        return (
-            <button onClick={handleLogout}>Logout</button>
-        );
-    }
-
+  return null;
 };
 
 export default Logout;

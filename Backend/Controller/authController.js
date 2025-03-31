@@ -9,18 +9,20 @@ const register = async (req, res) => {
             name: req.body.name,
             email: req.body.email,
             password: hashedPassword,
+            role: req.body.role || "user", // Default role is "user"
         });
 
         const token = jwt.sign(
             {
                 name: user.name,
                 email: user.email,
+                role: user.role, // Include role in the token
             },
             process.env.JWT_SECRET,
             { expiresIn: '12h' }
         );
 
-        return res.json({ status: 'ok', user: token });
+        return res.json({ status: 'ok', user: token, role: user.role });
     } catch (err) {
         res.json({ status: 'error', error: 'Duplicate email' });
     }
@@ -42,12 +44,13 @@ const login = async (req, res) => {
             {
                 name: user.name,
                 email: user.email,
+                role: user.role, // Include role in the token
             },
             process.env.JWT_SECRET,
             { expiresIn: '12h' }
         );
 
-        return res.json({ status: 'ok', user: token });
+        return res.json({ status: 'ok', user: token, role: user.role });
     } else {
         return res.json({ status: 'error', user: false });
     }

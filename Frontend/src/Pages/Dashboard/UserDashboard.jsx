@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; // React Router for navigation
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import io from "socket.io-client";
 import {
@@ -7,7 +7,6 @@ import {
   Shield,
   Activity,
   AlertTriangle,
-  CheckCircle,
   Clock,
   Filter,
   Plus,
@@ -15,8 +14,10 @@ import {
   Search,
   Eye,
   X,
+  LogOut,
+  Home,
+  User,
 } from "lucide-react";
-import Sidebar from "../../Components/Sidebar"; // Import existing Sidebar component
 
 // Initialize Socket.io client
 const socket = io("http://localhost:3000");
@@ -24,7 +25,7 @@ const socket = io("http://localhost:3000");
 // Transaction Form Component
 const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
   const [formData, setFormData] = useState({
-    step: "",
+    step: "1", // Default step to 1
     type: "",
     amount: "",
     nameOrig: "",
@@ -34,39 +35,87 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
     oldbalanceDest: "",
     newbalanceDest: "",
   });
-  const [result, setResult] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
   useEffect(() => {
     if (!token) navigate("/login");
-    socket.on("fraudAlert", (data) => alert(`Fraud Detected: ${data.amount}`));
-    return () => socket.off("fraudAlert");
-  }, [token, navigate]);
+
+    const fetchUserDetails = async () => {
+      try {
+        const response = await axios.get(
+          "http://localhost:3000/api/profile/user-details",
+          {
+            headers: { "x-access-token": token },
+          }
+        );
+        const { name, accountBalance } = response.data.user;
+        setFormData((prev) => ({
+          ...prev,
+          nameOrig: name || "Unknown User", // Fallback if name is missing
+          oldbalanceOrg: accountBalance !== undefined ? accountBalance.toString() : "0",
+          newbalanceOrig: accountBalance !== undefined ? accountBalance.toString() : "0", // Initial value matches oldbalanceOrg
+        }));
+      } catch (error) {
+        console.error("Error fetching user details:", error);
+        if (error.response?.status === 401) navigate("/login");
+        setErrorMessage("Failed to load user details.");
+      }
+    };
+
+    if (isOpen) fetchUserDetails();
+  }, [isOpen, token, navigate]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleAmountChange = (e) => {
+    const amount = parseFloat(e.target.value) || 0;
+    const oldBalance = parseFloat(formData.oldbalanceOrg) || 0;
+    setFormData((prev) => ({
+      ...prev,
+      amount: amount.toString(),
+      newbalanceOrig: (oldBalance - amount).toString(),
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setErrorMessage("");
+
+    const payload = {
+      step: parseInt(formData.step) || 1, // Default to 1 if invalid
+      type: formData.type,
+      amount: parseFloat(formData.amount) || 0,
+      nameOrig: formData.nameOrig,
+      oldbalanceOrg: parseFloat(formData.oldbalanceOrg) || 0,
+      newbalanceOrig: parseFloat(formData.newbalanceOrig) || 0,
+      nameDest: formData.nameDest,
+      oldbalanceDest: parseFloat(formData.oldbalanceDest) || 0,
+      newbalanceDest: parseFloat(formData.newbalanceDest) || 0,
+    };
 
     try {
       const response = await axios.post(
         "http://localhost:3000/api/transactions",
-        formData,
+        payload,
         {
           headers: { "x-access-token": token },
         }
       );
-      setResult(response.data);
-      onTransactionAdded(response.data); // Notify parent to refresh transactions
+      onTransactionAdded(response.data);
+      onClose();
     } catch (error) {
+      console.error("Error submitting transaction:", error);
       if (error.response?.status === 401) navigate("/login");
-      console.errorLTE("Error submitting transaction:", error);
+      setErrorMessage(
+        error.response?.data?.error || "Failed to submit transaction."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -86,7 +135,11 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
             <X className="w-4 h-4" />
           </button>
         </div>
-
+        {errorMessage && (
+          <div className="mb-4 p-2 bg-[#ff5555]/20 text-[#ff5555] rounded-md text-sm">
+            {errorMessage}
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="grid gap-4">
           <div>
             <label className="block text-sm text-gray-400 mb-1">Step</label>
@@ -100,7 +153,6 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
               className="w-full bg-[#0a0a0a] border border-[#4aff78]/10 rounded-md py-2 px-3 text-white text-sm focus:outline-none focus:border-[#4aff78]/30"
             />
           </div>
-
           <div>
             <label className="block text-sm text-gray-400 mb-1">
               Transaction Type
@@ -120,7 +172,6 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
               <option value="TRANSFER">TRANSFER</option>
             </select>
           </div>
-
           <div>
             <label className="block text-sm text-gray-400 mb-1">Amount</label>
             <input
@@ -128,12 +179,11 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
               type="number"
               placeholder="Amount"
               value={formData.amount}
-              onChange={handleChange}
+              onChange={handleAmountChange}
               required
               className="w-full bg-[#0a0a0a] border border-[#4aff78]/10 rounded-md py-2 px-3 text-white text-sm focus:outline-none focus:border-[#4aff78]/30"
             />
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-400 mb-1">
@@ -141,14 +191,11 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
               </label>
               <input
                 name="nameOrig"
-                placeholder="Origin Account Name"
                 value={formData.nameOrig}
-                onChange={handleChange}
-                required
-                className="w-full bg-[#0a0a0a] border border-[#4aff78]/10 rounded-md py-2 px-3 text-white text-sm focus:outline-none focus:border-[#4aff78]/30"
+                disabled // Disabled to prevent changes
+                className="w-full bg-[#0a0a0a] border border-[#4aff78]/10 rounded-md py-2 px-3 text-white text-sm focus:outline-none focus:border-[#4aff78]/30 opacity-70 cursor-not-allowed"
               />
             </div>
-
             <div>
               <label className="block text-sm text-gray-400 mb-1">
                 Destination Account
@@ -163,7 +210,6 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
               />
             </div>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-400 mb-1">
@@ -171,32 +217,12 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
               </label>
               <input
                 name="oldbalanceOrg"
-                type="number"
-                placeholder="Origin Old Balance"
                 value={formData.oldbalanceOrg}
-                onChange={handleChange}
-                required
-                className="w-full bg-[#0a0a0a] border border-[#4aff78]/10 rounded-md py-2 px-3 text-white text-sm focus:outline-none focus:border-[#4aff78]/30"
+                disabled // Disabled to prevent changes
+                className="w-full bg-[#0a0a0a] border border-[#4aff78]/10 rounded-md py-2 px-3 text-white text-sm focus:outline-none focus:border-[#4aff78]/30 opacity-70 cursor-not-allowed"
               />
             </div>
-
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">
-                Origin New Balance
-              </label>
-              <input
-                name="newbalanceOrig"
-                type="number"
-                placeholder="Origin New Balance"
-                value={formData.newbalanceOrig}
-                onChange={handleChange}
-                required
-                className="w-full bg-[#0a0a0a] border border-[#4aff78]/10 rounded-md py-2 px-3 text-white text-sm focus:outline-none focus:border-[#4aff78]/30"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
             <div>
               <label className="block text-sm text-gray-400 mb-1">
                 Destination Old Balance
@@ -211,7 +237,19 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
                 className="w-full bg-[#0a0a0a] border border-[#4aff78]/10 rounded-md py-2 px-3 text-white text-sm focus:outline-none focus:border-[#4aff78]/30"
               />
             </div>
-
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+              <label className="block text-sm text-gray-400 mb-1">
+                Origin New Balance
+              </label>
+              <input
+                name="newbalanceOrig"
+                value={formData.newbalanceOrig}
+                disabled // Disabled since it's calculated
+                className="w-full bg-[#0a0a0a] border border-[#4aff78]/10 rounded-md py-2 px-3 text-white text-sm focus:outline-none focus:border-[#4aff78]/30 opacity-70 cursor-not-allowed"
+              />
+            </div>
             <div>
               <label className="block text-sm text-gray-400 mb-1">
                 Destination New Balance
@@ -227,7 +265,6 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
               />
             </div>
           </div>
-
           <button
             type="submit"
             disabled={isSubmitting}
@@ -239,46 +276,12 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
             <span className="absolute inset-0 bg-gradient-to-r from-[#8aff8a] to-[#4aff78] opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
           </button>
         </form>
-
-        {result && (
-          <div className="mt-6 bg-[#0a0a0a] border border-[#4aff78]/10 rounded-lg p-4">
-            <h3 className="text-lg font-medium mb-3">Analysis Result</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400">Fraud Detection:</span>
-                <span
-                  className={
-                    result.isFraud
-                      ? "text-[#ff5555] font-medium"
-                      : "text-[#4aff78] font-medium"
-                  }
-                >
-                  {result.isFraud ? "Suspicious" : "Legitimate"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400">Fraud Probability:</span>
-                <span className="font-medium">
-                  {(result.fraud_probability * 100).toFixed(2)}%
-                </span>
-              </div>
-              <div className="pt-2 border-t border-[#4aff78]/10">
-                <div className="text-sm text-gray-400 mb-1">Insight:</div>
-                <div className="text-sm">{result.insight}</div>
-              </div>
-              <div>
-                <div className="text-sm text-gray-400 mb-1">Compliance:</div>
-                <div className="text-sm">{result.compliance}</div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
 };
 
-// Main Dashboard Component
+// Main Dashboard Component (unchanged)
 export default function UserDashboard() {
   const [isVisible, setIsVisible] = useState(false);
   const [liveUpdates, setLiveUpdates] = useState(true);
@@ -286,11 +289,11 @@ export default function UserDashboard() {
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [transactions, setTransactions] = useState([]);
-  const [activePage, setActivePage] = useState("dashboard"); // Track active page
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [activePage, setActivePage] = useState("dashboard");
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
-  // Fetch transactions from the backend
   const fetchTransactions = async () => {
     try {
       const response = await axios.get(
@@ -309,17 +312,16 @@ export default function UserDashboard() {
   useEffect(() => {
     if (!token) navigate("/login");
     setIsVisible(true);
-    fetchTransactions(); // Initial fetch
+    fetchTransactions();
 
     if (liveUpdates) {
-      const interval = setInterval(fetchTransactions, 15000); // Poll every 15 seconds
+      const interval = setInterval(fetchTransactions, 15000);
       return () => clearInterval(interval);
     }
   }, [liveUpdates, token, navigate]);
 
-  // Handle new transaction addition
-  const handleTransactionAdded = (newTransaction) => {
-    setTransactions((prev) => [newTransaction, ...prev]);
+  const handleTransactionAdded = (data) => {
+    setTransactions((prev) => [data.transaction, ...prev]);
   };
 
   const handleNavigate = (page) => {
@@ -333,21 +335,57 @@ export default function UserDashboard() {
 
   return (
     <div className="flex">
-      {/* Sidebar */}
-      <Sidebar activePage={activePage} onNavigate={handleNavigate} />
+      <div className="fixed top-0 left-0 h-screen w-64 bg-[#0a0a0a] border-r border-[#4aff78]/10">
+        <div className="p-6">
+          <div className="flex items-center gap-2 mb-6">
+            <div className="w-8 h-8 bg-[#4aff78] rounded flex items-center justify-center">
+              <Shield className="w-5 h-5 text-black" />
+            </div>
+            <span className="font-bold text-xl text-white">SecureGuard</span>
+          </div>
+          <nav className="space-y-4">
+            <button
+              onClick={() => handleNavigate("dashboard")}
+              className={`flex items-center gap-2 w-full text-left px-4 py-2 rounded-md ${
+                activePage === "dashboard"
+                  ? "bg-[#4aff78]/10 text-[#4aff78]"
+                  : "text-gray-400 hover:bg-[#4aff78]/5 hover:text-white"
+              }`}
+            >
+              <Home className="w-5 h-5" />
+              Dashboard
+            </button>
+            <button
+              onClick={() => handleNavigate("profile")}
+              className={`flex items-center gap-2 w-full text-left px-4 py-2 rounded-md ${
+                activePage === "profile"
+                  ? "bg-[#4aff78]/10 text-[#4aff78]"
+                  : "text-gray-400 hover:bg-[#4aff78]/5 hover:text-white"
+              }`}
+            >
+              <User className="w-5 h-5" />
+              Profile
+            </button>
+            <button
+              onClick={() => handleNavigate("logout")}
+              className="flex items-center gap-2 w-full text-left px-4 py-2 rounded-md text-gray-400 hover:bg-[#4aff78]/5 hover:text-white"
+            >
+              <LogOut className="w-5 h-5" />
+              Logout
+            </button>
+          </nav>
+        </div>
+      </div>
 
-      {/* Main Content */}
       <div className="flex-1 ml-64 min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#0f1a12] to-[#0a120a] text-white overflow-hidden relative">
         <div className="absolute -z-10 w-full h-full bg-[#4aff78]/5 mix-blend-overlay"></div>
 
-        {/* Transaction Form Modal */}
         <TransactionForm
           isOpen={showTransactionForm}
           onClose={() => setShowTransactionForm(false)}
           onTransactionAdded={handleTransactionAdded}
         />
 
-        {/* Navbar */}
         <header className="container mx-auto px-4 py-6 flex justify-between items-center border-b border-[#4aff78]/10">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-[#4aff78] rounded flex items-center justify-center">
@@ -357,7 +395,6 @@ export default function UserDashboard() {
           </div>
         </header>
 
-        {/* Dashboard Header */}
         <div className="container mx-auto px-4 py-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div>
@@ -368,7 +405,6 @@ export default function UserDashboard() {
                 Monitor and manage your financial transactions
               </p>
             </div>
-
             <div className="flex items-center gap-3">
               <button
                 className="group relative px-4 py-2 bg-gradient-to-r from-[#4aff78] to-[#8aff8a] rounded-md text-black font-medium transition-all duration-300 hover:shadow-[0_0_20px_rgba(74,255,120,0.5)] overflow-hidden"
@@ -379,7 +415,6 @@ export default function UserDashboard() {
                 </span>
                 <span className="absolute inset-0 bg-gradient-to-r from-[#8aff8a] to-[#4aff78] opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
               </button>
-
               <div className="flex items-center gap-2 bg-[#1c1c1c] rounded-md px-3 py-2 border border-[#4aff78]/10">
                 <div
                   className={`w-2 h-2 rounded-full ${
@@ -403,7 +438,6 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          {/* Overview Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {[
               {
@@ -419,13 +453,6 @@ export default function UserDashboard() {
                 icon: <AlertTriangle className="w-5 h-5" />,
                 suffix: "for review",
                 color: "from-[#ff5555]/10 to-[#ff8855]/5",
-              },
-              {
-                title: "Pending Transactions",
-                value: transactions.filter((t) => !t.isFraud).length,
-                icon: <Clock className="w-5 h-5" />,
-                suffix: "awaiting analysis",
-                color: "from-[#ffaa55]/10 to-[#ffcc55]/5",
               },
             ].map((card, index) => (
               <div
@@ -469,7 +496,6 @@ export default function UserDashboard() {
             ))}
           </div>
 
-          {/* Transactions Section */}
           <div
             className={`bg-gradient-to-tr from-[#1c1c1c] to-[#0a0a0a] rounded-xl border border-[#4aff78]/10 p-6 transition-all duration-1000 delay-300 ${
               isVisible
@@ -479,7 +505,6 @@ export default function UserDashboard() {
           >
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
               <h2 className="text-xl font-bold">Recent Transactions</h2>
-
               <div className="flex items-center gap-3 w-full md:w-auto">
                 <div className="relative flex-1 md:flex-auto">
                   <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
@@ -491,7 +516,6 @@ export default function UserDashboard() {
                     className="w-full bg-[#0a0a0a] border border-[#4aff78]/10 rounded-md py-2 pl-10 pr-3 text-sm focus:outline-none focus:border-[#4aff78]/30"
                   />
                 </div>
-
                 <div className="relative">
                   <button
                     className="flex items-center gap-2 bg-[#0a0a0a] border border-[#4aff78]/10 rounded-md py-2 px-3 text-sm"
@@ -501,7 +525,6 @@ export default function UserDashboard() {
                     <span>Filter</span>
                     <ChevronDown className="w-4 h-4" />
                   </button>
-
                   {showFilterMenu && (
                     <div className="absolute right-0 mt-2 w-48 bg-[#1c1c1c] border border-[#4aff78]/10 rounded-md shadow-lg z-10">
                       <div className="py-1">
@@ -541,7 +564,7 @@ export default function UserDashboard() {
                       Date/Time
                     </th>
                     <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">
-                      Status
+                      Fraud
                     </th>
                     <th className="text-right py-3 px-4 text-gray-400 font-medium text-sm">
                       Action
@@ -561,33 +584,27 @@ export default function UserDashboard() {
                       </td>
                       <td className="py-4 px-4">{transaction.type}</td>
                       <td className="py-4 px-4 font-medium">
-                        ₹{transaction.amount.toLocaleString()}
+                        ${transaction.amount.toLocaleString()}
                       </td>
                       <td className="py-4 px-4 text-gray-400">
                         {new Date(transaction.created_at).toLocaleString()}
                       </td>
                       <td className="py-4 px-4">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`w-2 h-2 rounded-full ${
-                              transaction.isFraud
-                                ? "bg-[#ff5555]"
-                                : "bg-[#4aff78]"
-                            }`}
-                          ></div>
-                          <span
-                            className={
-                              transaction.isFraud
-                                ? "text-[#ff5555]"
-                                : "text-[#4aff78]"
-                            }
-                          >
-                            {transaction.isFraud ? "Flagged" : "Pending"}
-                          </span>
-                        </div>
+                        <span
+                          className={
+                            transaction.isFraud
+                              ? "text-[#ff5555]"
+                              : "text-[#4aff78]"
+                          }
+                        >
+                          {transaction.isFraud ? "Yes" : "No"}
+                        </span>
                       </td>
                       <td className="py-4 px-4 text-right">
-                        <button className="text-[#4aff78] hover:text-[#8aff8a] transition-colors">
+                        <button
+                          className="text-[#4aff78] hover:text-[#8aff8a] transition-colors"
+                          onClick={() => setSelectedTransaction(transaction)}
+                        >
                           <Eye className="w-4 h-4" />
                         </button>
                       </td>
@@ -606,9 +623,82 @@ export default function UserDashboard() {
               </button>
             </div>
           </div>
+
+          {selectedTransaction && (
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-gradient-to-tr from-[#1c1c1c] to-[#0a0a0a] rounded-xl border border-[#4aff78]/20 p-6 w-full max-w-xl">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold text-white">
+                    Transaction Details
+                  </h2>
+                  <button
+                    onClick={() => setSelectedTransaction(null)}
+                    className="w-8 h-8 rounded-full bg-[#0a0a0a] border border-[#4aff78]/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <span className="text-gray-400">Transaction ID:</span>
+                    <span className="ml-2 text-white">
+                      {selectedTransaction.transactionId}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Type:</span>
+                    <span className="ml-2 text-white">
+                      {selectedTransaction.type}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Amount:</span>
+                    <span className="ml-2 text-white">
+                      ${selectedTransaction.amount.toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Date/Time:</span>
+                    <span className="ml-2 text-white">
+                      {new Date(selectedTransaction.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Fraud:</span>
+                    <span
+                      className={`ml-2 ${
+                        selectedTransaction.isFraud
+                          ? "text-[#ff5555]"
+                          : "text-[#4aff78]"
+                      }`}
+                    >
+                      {selectedTransaction.isFraud ? "Yes" : "No"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Fraud Probability:</span>
+                    <span className="ml-2 text-white">
+                      {(selectedTransaction.fraud_probability * 100).toFixed(2)}%
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Insight:</span>
+                    <p className="mt-1 text-white">
+                      {selectedTransaction.insight}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Compliance:</span>
+                    <p className="mt-1 text-white">
+                      {selectedTransaction.compliance}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Footer */}
         <footer className="container mx-auto px-4 py-6 border-t border-[#4aff78]/10 mt-12">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center gap-2 mb-4 md:mb-0">

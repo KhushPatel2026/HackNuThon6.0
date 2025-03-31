@@ -8,6 +8,7 @@ import {
   Users,
   Settings,
   PieChart,
+  LogOut
 } from "lucide-react"; // Ensure lucide-react is installed and correctly imported
 import { Link } from "react-router-dom"; // Replace Next.js Link with React Router Link
 
@@ -61,7 +62,7 @@ export default function Sidebar({
           <SidebarItem
             icon={<BarChart3 className="w-5 h-5" />}
             label="Dashboard"
-            href="/user-dashboard"
+            href="/admin-dashboard"
             isActive={activePage === "dashboard"}
           />
         </SidebarSection>
@@ -78,14 +79,14 @@ export default function Sidebar({
         <SidebarSection title="ANALYTICS">
           <SidebarItem
             icon={<PieChart className="w-5 h-5" />}
-            label="Transactions"
+            label="Logs"
             href="/audit-logs"
             isActive={activePage === "reports"}
           />
           <SidebarItem
-            icon={<Shield className="w-5 h-5" />}
-            label="AI Insights"
-            href="/ai-insights"
+            icon={<LogOut className="w-5 h-5" />}
+            label="Logout"
+            href="/Logout"
             isActive={activePage === "ai-insights"}
           />
         </SidebarSection>
