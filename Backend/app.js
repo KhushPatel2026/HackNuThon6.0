@@ -14,6 +14,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 // Import Google Generative AI SDK
 const User = require('./Model/User');
 
+
 const authRoutes = require('./routes/authRoutes');
 const profileRoutes = require('./routes/profileRoutes');
 const socialAuthRoutes = require('./routes/socialAuthRoute');
@@ -152,14 +153,6 @@ app.post('/api/transactions', authenticateUser, async (req, res) => {
             userId: req.user._id
         };
 
-        const User = await User.findById(req.user._id);
-        if (!User) {
-            return res.status(404).json({ status: 'error', error: 'User not found' });
-        }
-
-        User.accountBalance -= transaction.amount;
-        await User.save();
-
         const newTransaction = new Transaction(processedTransaction);
         const savedTransaction = await newTransaction.save();
 
@@ -176,6 +169,23 @@ app.post('/api/transactions', authenticateUser, async (req, res) => {
         if (isFraud) {
             io.emit('fraudAlert', savedTransaction);
         }
+        const token = req.headers['x-access-token'];
+        if (!token) {
+            console.log('Authentication error: No token provided');
+            return res.status(401).json({ status: 'error', error: 'No authentication token provided' });
+        }
+        
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        
+        const user = await User.findOne({ email: decoded.email }).select('-password');
+
+        if (!user) {
+            console.log('Authentication error: User not found for email:', decoded.email);
+            return res.status(404).json({ status: 'error', error: 'User not found' });
+        }
+
+        user.accountBalance -= transaction.amount;
+        await user.save();
 
         res.json({
             transaction: savedTransaction,
