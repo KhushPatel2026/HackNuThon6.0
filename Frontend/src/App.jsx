@@ -10,6 +10,12 @@ import Test from './Pages/Testing/Test'
 import TransactionForm from './Pages/Transaction/transactionForm'
 import AdminPanel from './Pages/Transaction/adminPanel'
 import AuditLogs from './Pages/Transaction/auditLogs'
+import FraudDetectionLanding from './Pages/Landing/Landing'
+import AdminDashboard from './Pages/Dashboard/AdminDashboard'
+import UserDashboard from './Pages/Dashboard/UserDashboard'
+import Sidebar from './Components/Sidebar'
+import RegisterPage from './Pages/Authentication/Register/Register'
+
 
 function App() {
 
@@ -31,15 +37,21 @@ function App() {
 
   return (
     <div>
+      
       <Logout/>
       <Routes>
-        <Route path="/login" element={<Login/>} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<RegisterPage/>} />
+
 				<Route path="/profile" element={<Profile/>} />
         <Route path="/test" element={<Test/>} />
         <Route path="/" element={<TransactionForm/>} />
         <Route path="/admin" element={<AdminPanel/>} />
         <Route path="/audit-logs" element={<AuditLogs/>} />
         <Route path="*" element={<h1>404 Not Found</h1>} />
+        <Route path="/landing" element={<FraudDetectionLanding />} />
+        <Route path="/user-dashboard" element={<UserDashboard />} />
+        <Route path="/admin-dashboard" element={<AdminDashboard />} />
 			</Routes>
     </div>
   )

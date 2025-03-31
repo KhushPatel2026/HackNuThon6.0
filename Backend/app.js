@@ -14,9 +14,9 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 // Import Google Generative AI SDK
 const User = require('./Model/User');
 
-const authRoutes = require('./routes/authRoutes');
-const profileRoutes = require('./routes/profileRoutes');
-const socialAuthRoutes = require('./routes/socialAuthRoute');
+const authRoutes = require('./Routes/authRoutes');
+const profileRoutes = require('./Routes/profileRoutes');
+const socialAuthRoutes = require('./Routes/socialAuthRoute');
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: 'http://localhost:5173' } });
