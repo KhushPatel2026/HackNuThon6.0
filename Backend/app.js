@@ -45,20 +45,6 @@ mongoose.connect(MONGO_URL)
     .then(() => console.log("MongoDB connected"))
     .catch(err => console.error("MongoDB error:", err));
 
-mongoose.connection.once('open', async () => {
-    try {
-        const collections = await mongoose.connection.db.listCollections().toArray();
-        const transactionCollectionExists = collections.some(
-            collection => collection.name === 'transactions'
-        );
-
-        if (transactionCollectionExists) {
-            await mongoose.connection.db.dropCollection('transactions');
-        }
-    } catch (error) {
-        console.error("Error handling collection:", error);
-    }
-});
 
 // Transaction Schema - now with a completely new name to avoid conflicts
 const transactionSchema = new mongoose.Schema({

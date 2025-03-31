@@ -22,7 +22,7 @@ function App() {
     const token = localStorage.getItem('token');
 
     // Allow access to public routes like /login and /register
-    if (!token && !['/login', '/register'].includes(location.pathname)) {
+    if (!token && !['/login', '/register','/landing'].includes(location.pathname)) {
       navigate('/login', { replace: true });
     }
   }, [navigate, location]);
