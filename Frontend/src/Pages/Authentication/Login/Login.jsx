@@ -38,7 +38,7 @@ export default function LoginPage() {
                 window.location.href = '/user-dashboard'; // Redirect to the dashboard after successful login
             }, 1500);
         } else {
-            toast.error('Please check your credentials');
+            return setError('Please check your credentials');
         }
     } catch (error) {
         toast.error('An error occurred. Please try again.');

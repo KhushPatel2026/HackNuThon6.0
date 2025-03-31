@@ -61,21 +61,8 @@ export default function Sidebar({
           <SidebarItem
             icon={<BarChart3 className="w-5 h-5" />}
             label="Dashboard"
-            href="/dashboard"
+            href="/user-dashboard"
             isActive={activePage === "dashboard"}
-          />
-          <SidebarItem
-            icon={<Activity className="w-5 h-5" />}
-            label="Transactions"
-            href="/transactions"
-            isActive={activePage === "transactions"}
-          />
-          <SidebarItem
-            icon={<AlertTriangle className="w-5 h-5" />}
-            label="Alerts"
-            href="/alerts"
-            isActive={activePage === "alerts"}
-            badge={notificationCount}
           />
         </SidebarSection>
 
@@ -85,20 +72,14 @@ export default function Sidebar({
             label="Users"
             href="/users"
             isActive={activePage === "users"}
-          />
-          <SidebarItem
-            icon={<Settings className="w-5 h-5" />}
-            label="Settings"
-            href="/settings"
-            isActive={activePage === "settings"}
-          />
+         />
         </SidebarSection>
 
         <SidebarSection title="ANALYTICS">
           <SidebarItem
             icon={<PieChart className="w-5 h-5" />}
-            label="Reports"
-            href="/reports"
+            label="Transactions"
+            href="/audit-logs"
             isActive={activePage === "reports"}
           />
           <SidebarItem

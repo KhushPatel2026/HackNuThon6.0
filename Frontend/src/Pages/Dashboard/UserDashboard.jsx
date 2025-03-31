@@ -16,6 +16,7 @@ import {
   Eye,
   X,
 } from "lucide-react";
+import Sidebar from "../../Components/Sidebar"; // Import existing Sidebar component
 
 // Initialize Socket.io client
 const socket = io("http://localhost:3000");
@@ -101,7 +102,9 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Transaction Type</label>
+            <label className="block text-sm text-gray-400 mb-1">
+              Transaction Type
+            </label>
             <select
               name="type"
               value={formData.type}
@@ -133,7 +136,9 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Origin Account</label>
+              <label className="block text-sm text-gray-400 mb-1">
+                Origin Account
+              </label>
               <input
                 name="nameOrig"
                 placeholder="Origin Account Name"
@@ -145,7 +150,9 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
             </div>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Destination Account</label>
+              <label className="block text-sm text-gray-400 mb-1">
+                Destination Account
+              </label>
               <input
                 name="nameDest"
                 placeholder="Destination Account Name"
@@ -159,7 +166,9 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Origin Old Balance</label>
+              <label className="block text-sm text-gray-400 mb-1">
+                Origin Old Balance
+              </label>
               <input
                 name="oldbalanceOrg"
                 type="number"
@@ -172,7 +181,9 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
             </div>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Origin New Balance</label>
+              <label className="block text-sm text-gray-400 mb-1">
+                Origin New Balance
+              </label>
               <input
                 name="newbalanceOrig"
                 type="number"
@@ -187,7 +198,9 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Destination Old Balance</label>
+              <label className="block text-sm text-gray-400 mb-1">
+                Destination Old Balance
+              </label>
               <input
                 name="oldbalanceDest"
                 type="number"
@@ -200,7 +213,9 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
             </div>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Destination New Balance</label>
+              <label className="block text-sm text-gray-400 mb-1">
+                Destination New Balance
+              </label>
               <input
                 name="newbalanceDest"
                 type="number"
@@ -232,14 +247,20 @@ const TransactionForm = ({ isOpen, onClose, onTransactionAdded }) => {
               <div className="flex justify-between items-center">
                 <span className="text-gray-400">Fraud Detection:</span>
                 <span
-                  className={result.isFraud ? "text-[#ff5555] font-medium" : "text-[#4aff78] font-medium"}
+                  className={
+                    result.isFraud
+                      ? "text-[#ff5555] font-medium"
+                      : "text-[#4aff78] font-medium"
+                  }
                 >
                   {result.isFraud ? "Suspicious" : "Legitimate"}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-400">Fraud Probability:</span>
-                <span className="font-medium">{(result.fraud_probability * 100).toFixed(2)}%</span>
+                <span className="font-medium">
+                  {(result.fraud_probability * 100).toFixed(2)}%
+                </span>
               </div>
               <div className="pt-2 border-t border-[#4aff78]/10">
                 <div className="text-sm text-gray-400 mb-1">Insight:</div>
@@ -265,15 +286,19 @@ export default function UserDashboard() {
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [transactions, setTransactions] = useState([]);
+  const [activePage, setActivePage] = useState("dashboard"); // Track active page
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
   // Fetch transactions from the backend
   const fetchTransactions = async () => {
     try {
-      const response = await axios.get("http://localhost:3000/api/transactions", {
-        headers: { "x-access-token": token },
-      });
+      const response = await axios.get(
+        "http://localhost:3000/api/transactions",
+        {
+          headers: { "x-access-token": token },
+        }
+      );
       setTransactions(response.data);
     } catch (error) {
       console.error("Error fetching transactions:", error);
@@ -297,335 +322,307 @@ export default function UserDashboard() {
     setTransactions((prev) => [newTransaction, ...prev]);
   };
 
-  // Map transaction status based on isFraud and other conditions
-  const mapTransactionStatus = (transaction) => {
-    if (transaction.isFraud) return "flagged";
-    if (transaction.fraud_probability > 0.5) return "pending"; // Example condition
-    return "approved";
-  };
-
-  // Filter transactions based on status
-  const filteredTransactions = transactions.filter((transaction) => {
-    const status = mapTransactionStatus(transaction);
-    if (statusFilter === "all") return true;
-    return status === statusFilter;
-  });
-
-  const counts = {
-    total: transactions.length,
-    flagged: transactions.filter((t) => mapTransactionStatus(t) === "flagged").length,
-    pending: transactions.filter((t) => mapTransactionStatus(t) === "pending").length,
+  const handleNavigate = (page) => {
+    if (page === "logout") {
+      localStorage.removeItem("token");
+      navigate("/login");
+    } else {
+      setActivePage(page);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#0f1a12] to-[#0a120a] text-white overflow-hidden relative">
-      <div className="absolute -z-10 w-full h-full bg-[#4aff78]/5 mix-blend-overlay"></div>
+    <div className="flex">
+      {/* Sidebar */}
+      <Sidebar activePage={activePage} onNavigate={handleNavigate} />
 
-      {/* Transaction Form Modal */}
-      <TransactionForm
-        isOpen={showTransactionForm}
-        onClose={() => setShowTransactionForm(false)}
-        onTransactionAdded={handleTransactionAdded}
-      />
+      {/* Main Content */}
+      <div className="flex-1 ml-64 min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#0f1a12] to-[#0a120a] text-white overflow-hidden relative">
+        <div className="absolute -z-10 w-full h-full bg-[#4aff78]/5 mix-blend-overlay"></div>
 
-      {/* Navbar */}
-      <header className="container mx-auto px-4 py-6 flex justify-between items-center border-b border-[#4aff78]/10">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-[#4aff78] rounded flex items-center justify-center">
-            <Shield className="w-5 h-5 text-black" />
+        {/* Transaction Form Modal */}
+        <TransactionForm
+          isOpen={showTransactionForm}
+          onClose={() => setShowTransactionForm(false)}
+          onTransactionAdded={handleTransactionAdded}
+        />
+
+        {/* Navbar */}
+        <header className="container mx-auto px-4 py-6 flex justify-between items-center border-b border-[#4aff78]/10">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-[#4aff78] rounded flex items-center justify-center">
+              <Shield className="w-5 h-5 text-black" />
+            </div>
+            <span className="font-bold text-xl">SecureGuard</span>
           </div>
-          <span className="font-bold text-xl">SecureGuard</span>
-        </div>
-      </header>
+        </header>
 
-      {/* Dashboard Header */}
-      <div className="container mx-auto px-4 py-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold">Transaction Dashboard</h1>
-            <p className="text-gray-400">Monitor and manage your financial transactions</p>
-          </div>
+        {/* Dashboard Header */}
+        <div className="container mx-auto px-4 py-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold">
+                Transaction Dashboard
+              </h1>
+              <p className="text-gray-400">
+                Monitor and manage your financial transactions
+              </p>
+            </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              className="group relative px-4 py-2 bg-gradient-to-r from-[#4aff78] to-[#8aff8a] rounded-md text-black font-medium transition-all duration-300 hover:shadow-[0_0_20px_rgba(74,255,120,0.5)] overflow-hidden"
-              onClick={() => setShowTransactionForm(true)}
-            >
-              <span className="relative z-10 flex items-center gap-2">
-                <Plus className="w-4 h-4" /> Add Transaction
-              </span>
-              <span className="absolute inset-0 bg-gradient-to-r from-[#8aff8a] to-[#4aff78] opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
-            </button>
-
-            <div className="flex items-center gap-2 bg-[#1c1c1c] rounded-md px-3 py-2 border border-[#4aff78]/10">
-              <div
-                className={`w-2 h-2 rounded-full ${liveUpdates ? "bg-[#4aff78] animate-pulse" : "bg-gray-500"}`}
-              ></div>
-              <span className="text-sm">Live Updates</span>
+            <div className="flex items-center gap-3">
               <button
-                className={`w-10 h-5 rounded-full relative ${liveUpdates ? "bg-[#4aff78]/30" : "bg-gray-700"} transition-colors duration-300`}
-                onClick={() => setLiveUpdates(!liveUpdates)}
+                className="group relative px-4 py-2 bg-gradient-to-r from-[#4aff78] to-[#8aff8a] rounded-md text-black font-medium transition-all duration-300 hover:shadow-[0_0_20px_rgba(74,255,120,0.5)] overflow-hidden"
+                onClick={() => setShowTransactionForm(true)}
               >
-                <span
-                  className={`absolute top-0.5 ${liveUpdates ? "right-0.5" : "left-0.5"} w-4 h-4 rounded-full bg-white transition-all duration-300`}
-                ></span>
+                <span className="relative z-10 flex items-center gap-2">
+                  <Plus className="w-4 h-4" /> Add Transaction
+                </span>
+                <span className="absolute inset-0 bg-gradient-to-r from-[#8aff8a] to-[#4aff78] opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
+              </button>
+
+              <div className="flex items-center gap-2 bg-[#1c1c1c] rounded-md px-3 py-2 border border-[#4aff78]/10">
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    liveUpdates ? "bg-[#4aff78] animate-pulse" : "bg-gray-500"
+                  }`}
+                ></div>
+                <span className="text-sm">Live Updates</span>
+                <button
+                  className={`w-10 h-5 rounded-full relative ${
+                    liveUpdates ? "bg-[#4aff78]/30" : "bg-gray-700"
+                  } transition-colors duration-300`}
+                  onClick={() => setLiveUpdates(!liveUpdates)}
+                >
+                  <span
+                    className={`absolute top-0.5 ${
+                      liveUpdates ? "right-0.5" : "left-0.5"
+                    } w-4 h-4 rounded-full bg-white transition-all duration-300`}
+                  ></span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Overview Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {[
+              {
+                title: "Total Transactions",
+                value: transactions.length,
+                icon: <Activity className="w-5 h-5" />,
+                suffix: "today",
+                color: "from-[#4aff78]/10 to-[#8aff8a]/5",
+              },
+              {
+                title: "Flagged Transactions",
+                value: transactions.filter((t) => t.isFraud).length,
+                icon: <AlertTriangle className="w-5 h-5" />,
+                suffix: "for review",
+                color: "from-[#ff5555]/10 to-[#ff8855]/5",
+              },
+              {
+                title: "Pending Transactions",
+                value: transactions.filter((t) => !t.isFraud).length,
+                icon: <Clock className="w-5 h-5" />,
+                suffix: "awaiting analysis",
+                color: "from-[#ffaa55]/10 to-[#ffcc55]/5",
+              },
+            ].map((card, index) => (
+              <div
+                key={index}
+                className={`bg-gradient-to-tr from-[#1c1c1c] to-[#0a0a0a] rounded-xl border border-[#4aff78]/10 p-6 transition-all duration-300 hover:shadow-[0_0_20px_rgba(74,255,120,0.1)] transition-all duration-1000 ${
+                  isVisible
+                    ? "opacity-100 translate-y-0"
+                    : "opacity-0 translate-y-12"
+                }`}
+                style={{ transitionDelay: `${index * 100}ms` }}
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="text-gray-400 text-sm mb-1">
+                      {card.title}
+                    </div>
+                    <div className="flex items-end gap-1">
+                      <div className="text-3xl font-bold">{card.value}</div>
+                      <div className="text-gray-400 text-sm mb-1">
+                        {card.suffix}
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    className={`w-10 h-10 rounded-lg bg-gradient-to-tr ${card.color} flex items-center justify-center`}
+                  >
+                    {card.icon}
+                  </div>
+                </div>
+                <div className="mt-4 h-1 w-full bg-[#1c1c1c] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#4aff78] to-[#8aff8a] rounded-full"
+                    style={{
+                      width: `${
+                        (card.value / transactions.length || 1) * 100
+                      }%`,
+                    }}
+                  ></div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Transactions Section */}
+          <div
+            className={`bg-gradient-to-tr from-[#1c1c1c] to-[#0a0a0a] rounded-xl border border-[#4aff78]/10 p-6 transition-all duration-1000 delay-300 ${
+              isVisible
+                ? "opacity-100 translate-y-0"
+                : "opacity-0 translate-y-12"
+            }`}
+          >
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+              <h2 className="text-xl font-bold">Recent Transactions</h2>
+
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <div className="relative flex-1 md:flex-auto">
+                  <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                    <Search className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search transactions..."
+                    className="w-full bg-[#0a0a0a] border border-[#4aff78]/10 rounded-md py-2 pl-10 pr-3 text-sm focus:outline-none focus:border-[#4aff78]/30"
+                  />
+                </div>
+
+                <div className="relative">
+                  <button
+                    className="flex items-center gap-2 bg-[#0a0a0a] border border-[#4aff78]/10 rounded-md py-2 px-3 text-sm"
+                    onClick={() => setShowFilterMenu(!showFilterMenu)}
+                  >
+                    <Filter className="w-4 h-4" />
+                    <span>Filter</span>
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+
+                  {showFilterMenu && (
+                    <div className="absolute right-0 mt-2 w-48 bg-[#1c1c1c] border border-[#4aff78]/10 rounded-md shadow-lg z-10">
+                      <div className="py-1">
+                        {["all", "flagged", "pending"].map((status) => (
+                          <button
+                            key={status}
+                            className="block w-full text-left px-4 py-2 text-sm hover:bg-[#4aff78]/10 transition-colors"
+                            onClick={() => {
+                              setStatusFilter(status);
+                              setShowFilterMenu(false);
+                            }}
+                          >
+                            {status.charAt(0).toUpperCase() + status.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[800px]">
+                <thead>
+                  <tr className="border-b border-[#4aff78]/10">
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">
+                      Transaction ID
+                    </th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">
+                      Description
+                    </th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">
+                      Amount
+                    </th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">
+                      Date/Time
+                    </th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">
+                      Status
+                    </th>
+                    <th className="text-right py-3 px-4 text-gray-400 font-medium text-sm">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.map((transaction, index) => (
+                    <tr
+                      key={transaction.transactionId}
+                      className={`border-b border-[#4aff78]/5 hover:bg-[#4aff78]/5 transition-colors ${
+                        index === 0 ? "animate-pulse bg-[#4aff78]/5" : ""
+                      }`}
+                    >
+                      <td className="py-4 px-4">
+                        {transaction.transactionId.slice(0, 8)}
+                      </td>
+                      <td className="py-4 px-4">{transaction.type}</td>
+                      <td className="py-4 px-4 font-medium">
+                        ₹{transaction.amount.toLocaleString()}
+                      </td>
+                      <td className="py-4 px-4 text-gray-400">
+                        {new Date(transaction.created_at).toLocaleString()}
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={`w-2 h-2 rounded-full ${
+                              transaction.isFraud
+                                ? "bg-[#ff5555]"
+                                : "bg-[#4aff78]"
+                            }`}
+                          ></div>
+                          <span
+                            className={
+                              transaction.isFraud
+                                ? "text-[#ff5555]"
+                                : "text-[#4aff78]"
+                            }
+                          >
+                            {transaction.isFraud ? "Flagged" : "Pending"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 text-right">
+                        <button className="text-[#4aff78] hover:text-[#8aff8a] transition-colors">
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-6 flex justify-between items-center">
+              <div className="text-sm text-gray-400">
+                Showing {transactions.length} transactions
+              </div>
+              <button className="flex items-center gap-1 text-[#4aff78] hover:text-[#8aff8a] transition-colors text-sm">
+                View All Transactions <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
         </div>
 
-        {/* Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {[
-            {
-              title: "Total Transactions",
-              value: counts.total,
-              icon: <Activity className="w-5 h-5" />,
-              suffix: "today",
-              color: "from-[#4aff78]/10 to-[#8aff8a]/5",
-            },
-            {
-              title: "Flagged Transactions",
-              value: counts.flagged,
-              icon: <AlertTriangle className="w-5 h-5" />,
-              suffix: "for review",
-              color: "from-[#ff5555]/10 to-[#ff8855]/5",
-            },
-            {
-              title: "Pending Transactions",
-              value: counts.pending,
-              icon: <Clock className="w-5 h-5" />,
-              suffix: "awaiting analysis",
-              color: "from-[#ffaa55]/10 to-[#ffcc55]/5",
-            },
-          ].map((card, index) => (
-            <div
-              key={index}
-              className={`bg-gradient-to-tr from-[#1c1c1c] to-[#0a0a0a] rounded-xl border border-[#4aff78]/10 p-6 transition-all duration-300 hover:shadow-[0_0_20px_rgba(74,255,120,0.1)] transition-all duration-1000 ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"}`}
-              style={{ transitionDelay: `${index * 100}ms` }}
-            >
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="text-gray-400 text-sm mb-1">{card.title}</div>
-                  <div className="flex items-end gap-1">
-                    <div className="text-3xl font-bold">{card.value}</div>
-                    <div className="text-gray-400 text-sm mb-1">{card.suffix}</div>
-                  </div>
-                </div>
-                <div
-                  className={`w-10 h-10 rounded-lg bg-gradient-to-tr ${card.color} flex items-center justify-center`}
-                >
-                  {card.icon}
-                </div>
+        {/* Footer */}
+        <footer className="container mx-auto px-4 py-6 border-t border-[#4aff78]/10 mt-12">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <div className="flex items-center gap-2 mb-4 md:mb-0">
+              <div className="w-6 h-6 bg-[#4aff78] rounded flex items-center justify-center">
+                <Shield className="w-4 h-4 text-black" />
               </div>
-              <div className="mt-4 h-1 w-full bg-[#1c1c1c] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-[#4aff78] to-[#8aff8a] rounded-full"
-                  style={{ width: `${(card.value / counts.total || 1) * 100}%` }}
-                ></div>
-              </div>
+              <span className="font-medium text-sm">SecureGuard</span>
             </div>
-          ))}
-        </div>
-
-        {/* Transactions Section */}
-        <div
-          className={`bg-gradient-to-tr from-[#1c1c1c] to-[#0a0a0a] rounded-xl border border-[#4aff78]/10 p-6 transition-all duration-1000 delay-300 ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"}`}
-        >
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-            <h2 className="text-xl font-bold">Recent Transactions</h2>
-
-            <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="relative flex-1 md:flex-auto">
-                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                  <Search className="w-4 h-4" />
-                </div>
-                <input
-                  type="text"
-                  placeholder="Search transactions..."
-                  className="w-full bg-[#0a0a0a] border border-[#4aff78]/10 rounded-md py-2 pl-10 pr-3 text-sm focus:outline-none focus:border-[#4aff78]/30"
-                />
-              </div>
-
-              <div className="relative">
-                <button
-                  className="flex items-center gap-2 bg-[#0a0a0a] border border-[#4aff78]/10 rounded-md py-2 px-3 text-sm"
-                  onClick={() => setShowFilterMenu(!showFilterMenu)}
-                >
-                  <Filter className="w-4 h-4" />
-                  <span>
-                    {statusFilter === "all"
-                      ? "All Transactions"
-                      : statusFilter === "approved"
-                      ? "Approved"
-                      : statusFilter === "flagged"
-                      ? "Flagged"
-                      : "Pending"}
-                  </span>
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-
-                {showFilterMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-[#1c1c1c] border border-[#4aff78]/10 rounded-md shadow-lg z-10">
-                    <div className="py-1">
-                      {["all", "approved", "flagged", "pending"].map((status) => (
-                        <button
-                          key={status}
-                          className="block w-full text-left px-4 py-2 text-sm hover:bg-[#4aff78]/10 transition-colors"
-                          onClick={() => {
-                            setStatusFilter(status);
-                            setShowFilterMenu(false);
-                          }}
-                        >
-                          {status === "all"
-                            ? "All Transactions"
-                            : status === "approved"
-                            ? "Approved"
-                            : status === "flagged"
-                            ? "Flagged"
-                            : "Pending"}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+            <div className="text-xs text-gray-400">
+              © {new Date().getFullYear()} SecureGuard. All rights reserved.
             </div>
           </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px]">
-              <thead>
-                <tr className="border-b border-[#4aff78]/10">
-                  <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Transaction ID</th>
-                  <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Description</th>
-                  <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Amount</th>
-                  <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Date/Time</th>
-                  <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Status</th>
-                  <th className="text-right py-3 px-4 text-gray-400 font-medium text-sm">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredTransactions.map((transaction, index) => (
-                  <tr
-                    key={transaction.transactionId}
-                    className={`border-b border-[#4aff78]/5 hover:bg-[#4aff78]/5 transition-colors ${index === 0 ? "animate-pulse bg-[#4aff78]/5" : ""}`}
-                  >
-                    <td className="py-4 px-4">{transaction.transactionId.slice(0, 8)}</td>
-                    <td className="py-4 px-4">{transaction.type}</td>
-                    <td className="py-4 px-4 font-medium">₹{transaction.amount.toLocaleString()}</td>
-                    <td className="py-4 px-4 text-gray-400">
-                      {new Date(transaction.created_at).toLocaleString()}
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            mapTransactionStatus(transaction) === "approved"
-                              ? "bg-[#4aff78]"
-                              : mapTransactionStatus(transaction) === "flagged"
-                              ? "bg-[#ff5555]"
-                              : "bg-[#ffaa55]"
-                          }`}
-                        ></div>
-                        <span
-                          className={
-                            mapTransactionStatus(transaction) === "approved"
-                              ? "text-[#4aff78]"
-                              : mapTransactionStatus(transaction) === "flagged"
-                              ? "text-[#ff5555]"
-                              : "text-[#ffaa55]"
-                          }
-                        >
-                          {mapTransactionStatus(transaction).charAt(0).toUpperCase() +
-                            mapTransactionStatus(transaction).slice(1)}
-                        </span>
-                      </div>
-                      {transaction.isFraud && (
-                        <div className="text-xs text-gray-400 mt-1 ml-4">Fraud Detected</div>
-                      )}
-                    </td>
-                    <td className="py-4 px-4 text-right">
-                      <button className="text-[#4aff78] hover:text-[#8aff8a] transition-colors">
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-6 flex justify-between items-center">
-            <div className="text-sm text-gray-400">
-              Showing {filteredTransactions.length} of {transactions.length} transactions
-            </div>
-            <button className="flex items-center gap-1 text-[#4aff78] hover:text-[#8aff8a] transition-colors text-sm">
-              View All Transactions <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* AI Insights */}
-        <div
-          className={`mt-8 bg-gradient-to-tr from-[#1c1c1c] to-[#0a0a0a] rounded-xl border border-[#4aff78]/10 p-6 transition-all duration-1000 delay-500 ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"}`}
-        >
-          <h2 className="text-xl font-bold mb-4">AI-Driven Insights</h2>
-          <div className="space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#4aff78]/10 flex items-center justify-center text-[#4aff78] shrink-0">
-                <AlertTriangle className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="font-medium">Unusual Pattern Detected</div>
-                <div className="text-sm text-gray-400">
-                  {counts.flagged} transactions flagged due to unusual patterns
-                </div>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#4aff78]/10 flex items-center justify-center text-[#4aff78] shrink-0">
-                <Activity className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="font-medium">Transaction Volume</div>
-                <div className="text-sm text-gray-400">
-                  Total of {transactions.length} transactions recorded
-                </div>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#4aff78]/10 flex items-center justify-center text-[#4aff78] shrink-0">
-                <CheckCircle className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="font-medium">Compliance Check</div>
-                <div className="text-sm text-gray-400">
-                  {counts.total - counts.flagged} transactions compliant with regulations
-                </div>
-              </div>
-            </div>
-          </div>
-          <button className="mt-4 flex items-center gap-1 text-[#4aff78] hover:text-[#8aff8a] transition-colors text-sm">
-            View Detailed Analysis <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
+        </footer>
       </div>
-
-      {/* Footer */}
-      <footer className="container mx-auto px-4 py-6 border-t border-[#4aff78]/10 mt-12">
-        <div className="flex flex-col md:flex-row justify-between items-center">
-          <div className="flex items-center gap-2 mb-4 md:mb-0">
-            <div className="w-6 h-6 bg-[#4aff78] rounded flex items-center justify-center">
-              <Shield className="w-4 h-4 text-black" />
-            </div>
-            <span className="font-medium text-sm">SecureGuard</span>
-          </div>
-          <div className="text-xs text-gray-400">
-            © {new Date().getFullYear()} SecureGuard. All rights reserved.
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

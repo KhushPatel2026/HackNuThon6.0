@@ -31,14 +31,12 @@ function App() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
-      navigate('/login', { replace: true });
+      navigate('/register', { replace: true });
     }
   }, [navigate]);
 
   return (
     <div>
-      
-      <Logout/>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<RegisterPage/>} />
