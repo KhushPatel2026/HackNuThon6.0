@@ -93,7 +93,7 @@ async def predict_fraud(transaction: Transaction):
         
         print("\n[DEBUG] Model Prediction:", prediction[0])
         print("[DEBUG] Fraud Probability:", probability)
-        
+
         return {
             "isFraud": bool(prediction[0]),
             "fraud_probability": float(probability),

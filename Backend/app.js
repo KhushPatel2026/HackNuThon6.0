@@ -114,7 +114,72 @@ app.post('/api/transactions', authenticateUser, async (req, res) => {
         const userTransactions = await Transaction.find({ userId: req.user._id }).sort({ created_at: -1 });
 
         const fraudResponse = await axios.post('http://localhost:8000/predict', transaction);
-        const { isFraud, fraud_probability } = fraudResponse.data;
+        let { isFraud, fraud_probability } = fraudResponse.data;
+        
+        if (transaction.type === 'CASH_OUT' && transaction.amount > 0.75 * transaction.oldbalanceOrg) {
+            isFraud = true;
+            fraud_probability = Math.max(fraud_probability, 0.9);
+        }
+
+        if (transaction.amount > 10000) {
+            isFraud = true;
+            fraud_probability = Math.max(fraud_probability, 0.95);
+        }
+
+        if (transaction.newbalanceOrig === 0 && transaction.oldbalanceOrg > 0) {
+            isFraud = true;
+            fraud_probability = Math.max(fraud_probability, 0.85);
+        }
+
+        const recentTransactions = userTransactions.filter(tx => 
+            new Date(tx.created_at) > new Date(Date.now() - 10 * 60 * 1000)
+        );
+        if (recentTransactions.length > 5) {
+            isFraud = true;
+            fraud_probability = Math.max(fraud_probability, 0.8);
+        }
+
+        const suspiciousKeywords = ['scam', 'lottery', 'prize', 'fraud', 'marketing'];
+        if (suspiciousKeywords.some(keyword => transaction.nameDest?.toLowerCase().includes(keyword))) {
+            isFraud = true;
+            fraud_probability = Math.max(fraud_probability, 0.85);
+        }
+
+        const uncommonTypes = userTransactions.map(tx => tx.type);
+        if (!uncommonTypes.includes(transaction.type)) {
+            isFraud = true;
+            fraud_probability = Math.max(fraud_probability, 0.8);
+        }
+
+        const knownRecipients = userTransactions.map(tx => tx.nameDest);
+        if (!knownRecipients.includes(transaction.nameDest)) {
+            isFraud = true;
+            fraud_probability = Math.max(fraud_probability, 0.75);
+        }
+
+        const recentCashouts = userTransactions.filter(tx => 
+            tx.type === 'CASH_OUT' && new Date(tx.created_at) > new Date(Date.now() - 60 * 60 * 1000)
+        );
+        if (recentCashouts.length > 3) {
+            isFraud = true;
+            fraud_probability = Math.max(fraud_probability, 0.85);
+        }
+
+        const blacklistedAccounts = ['1234567890', '9876543210']; 
+        if (blacklistedAccounts.includes(transaction.nameDest)) {
+            isFraud = true;
+            fraud_probability = 1.0;
+        }
+
+        if (transaction.oldbalanceOrg - transaction.newbalanceOrig > 50000) {
+            isFraud = true;
+            fraud_probability = Math.max(fraud_probability, 0.9);
+        }
+
+        if (transaction.nameOrig === transaction.nameDest) {
+            isFraud = true;
+            fraud_probability = 1.0;
+        }
 
         let insight = await getHuggingFaceInsight(transaction, isFraud, userTransactions);
         insight = formatOutput(insight);
